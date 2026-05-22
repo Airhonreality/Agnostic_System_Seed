@@ -21,8 +21,9 @@
  * - ALWAYS: Preservar un espacio de canvas expandido y limpio.
  */
 
-import React, { useState, useMemo, useEffect } from 'react';
-import { Route as RouteIcon, FileJson, Zap, Shield, RotateCcw, Box, Plus, Trash2, Sparkles, Layout, Info, Database, Palette, ExternalLink, Settings2, SlidersHorizontal } from 'lucide-react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { Route as RouteIcon, FileJson, Zap, Shield, RotateCcw, Box, Plus, Trash2, Sparkles, Layout, Info, Database, Palette, ExternalLink, Settings2, SlidersHorizontal, Check, ChevronsUpDown, Users } from 'lucide-react';
+import { useDebounce } from '@/hooks/useDebounce';
 import { toast } from 'sonner';
 import { useMateriaStore } from '@/lib/agnostic/store';
 import { useAppDispatch } from '@/context/AppContext';
@@ -30,13 +31,18 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
+// Unused Tabs imports removed
+import { SchemaField } from '@agnostic/core';
+import { arrayMove } from '@dnd-kit/sortable';
 import { AgnosticTreeView, TreeNode } from './AgnosticTreeView';
 import { SystemSection } from './sections/SystemSection';
 import { ImportWizard } from '@/components/agnostic/plugins/ImportWizard';
 import { RecursiveBlockComposer } from './components/RecursiveBlockComposer';
+import { TokensEditor } from './TokensEditor';
 import { cn } from '@/lib/utils';
-import { SYSTEM_NS } from '@/lib/agnostic/constants';
+import { SYSTEM_NS, FIELD_META_SCHEMA } from '@/lib/agnostic/constants';
+import { AgnosticConfigProjector } from '@/components/agnostic/modules/AgnosticConfigProjector';
+import { UserManager } from '@/components/agnostic/admin/UserManager';
 import {
   Dialog,
   DialogContent,
@@ -46,6 +52,8 @@ import {
   DialogFooter,
   DialogClose,
 } from '@/components/ui/dialog';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTrigger } from '@/components/ui/sheet';
 
 // ─── CONTRATOS DE EDICIÓN INTERNA ───────────────────────────────────────────
 
@@ -93,13 +101,8 @@ export function AgnosticDesigner({
   const [selectedRouteId, setSelectedRouteId] = useState<string | null>(initialRouteId);
   const [selectedSchemaId, setSelectedSchemaId] = useState<string | null>(null);
   const [selectedScriptId, setSelectedScriptId] = useState<string | null>(null);
-
-  const [centerTab, setCenterTab] = useState<'routes' | 'schemas' | 'logic'>(
-    initialSection === 'dna' ? 'schemas' : (initialSection === 'scripts' ? 'logic' : 'routes')
-  );
-
-  // Estado del Panel de Configuración Colapsable (Stage 2)
-  const [isConfigOpen, setIsConfigOpen] = useState(false);
+  type ActiveMode = 'dna' | 'users' | 'tokens' | 'silo';
+  const [activeMode, setActiveMode] = useState<ActiveMode>('dna');
 
   // Estado del Wizard de Importación
   const [showImport, setShowImport] = useState(false);
@@ -111,7 +114,9 @@ export function AgnosticDesigner({
   const routes = useMemo(() => materia[SYSTEM_NS.ROUTES] ?? [], [materia]);
   const schemas = useMemo(() => materia[SYSTEM_NS.SCHEMAS] ?? [], [materia]);
   const scripts = useMemo(() => materia['scripts'] ?? [], [materia]);
+  const tokens = useMemo(() => materia[SYSTEM_NS.TOKENS] ?? [], [materia]);
 
+  const userLists = useMemo(() => materia[SYSTEM_NS.USER_LISTS] ?? [], [materia]);
   const passportItem = (materia[SYSTEM_NS.CONFIG] ?? []).find(item => item.id === 'master_passport');
   const config = (passportItem?.data as any) ?? {};
 
@@ -141,7 +146,8 @@ export function AgnosticDesigner({
         title: 'Nueva Página',
         isPrivate: false,
         layout_mode: 'container',
-        blocks: []
+        blocks: [],
+        order: routes.length
       }
     };
     await saveItem(SYSTEM_NS.ROUTES, newRoute);
@@ -167,7 +173,8 @@ export function AgnosticDesigner({
       context: SYSTEM_NS.SCHEMAS,
       data: {
         name: `nuevo_schema_${Date.now().toString().slice(-4)}`,
-        fields: []
+        fields: [],
+        order: schemas.length
       }
     };
     await saveItem(SYSTEM_NS.SCHEMAS, newSchema);
@@ -195,7 +202,8 @@ export function AgnosticDesigner({
         name: `script_evento_${Date.now().toString().slice(-4)}`,
         description: 'Trigger disparado al salvar o procesar el formulario.',
         trigger: 'onSave',
-        code: `// JS puro - function run(record, api) {\nconsole.log("Script disparado exitosamente", record);\n// }`
+        code: `// JS puro - function run(record, api) {\nconsole.log("Script disparado exitosamente", record);\n// }`,
+        order: scripts.length
       }
     };
     await saveItem('scripts', newScript);
@@ -210,6 +218,26 @@ export function AgnosticDesigner({
 
   const handleRemoveScript = async (id: string) => {
     setPendingDelete({ type: 'script', id });
+  };
+
+  // ─── ACCIONES DE TOKENS ─────────────────────────────────────────────────────
+
+  const handleAddToken = async (data: any) => {
+    await saveItem(SYSTEM_NS.TOKENS, {
+      id: crypto.randomUUID(),
+      context: SYSTEM_NS.TOKENS,
+      data
+    });
+  };
+
+  const handleSaveToken = async (id: string, data: any) => {
+    const token = tokens.find((t: any) => t.id === id);
+    if (!token) return;
+    await saveItem(SYSTEM_NS.TOKENS, { ...token, data });
+  };
+
+  const handleRemoveToken = async (id: string) => {
+    await deleteItem(SYSTEM_NS.TOKENS, id);
   };
 
   const handleConfirmDelete = async () => {
@@ -231,232 +259,277 @@ export function AgnosticDesigner({
 
   // ─── CONSTRUCCIÓN DE NODOS DEL TREE ──────────────────────────────────────────
 
-  const routeNodes = useMemo<TreeNode[]>(() => routes.map((r: any) => ({
-    id: r.id,
-    label: r.data?.path || '/sin-ruta',
-    icon: RouteIcon,
-    badge: `${r.data?.blocks?.length ?? 0} Blks`,
-    data: r
-  })), [routes]);
+  const routeNodes = useMemo<TreeNode[]>(() => [...routes]
+    .sort((a, b) => Number(a.data?.order ?? 0) - Number(b.data?.order ?? 0))
+    .map((r: any) => ({
+      id: r.id,
+      label: r.data?.path || '/sin-ruta',
+      icon: RouteIcon,
+      badge: `${r.data?.blocks?.length ?? 0} Blks`,
+      data: r
+    })), [routes]);
 
-  const schemaNodes = useMemo<TreeNode[]>(() => schemas.map((s: any) => ({
-    id: s.id,
-    label: s.data?.name || 'sin_nombre',
-    icon: FileJson,
-    badge: `${s.data?.fields?.length ?? 0} Flds`,
-    data: s
-  })), [schemas]);
+  const schemaNodes = useMemo<TreeNode[]>(() => [...schemas]
+    .sort((a, b) => Number(a.data?.order ?? 0) - Number(b.data?.order ?? 0))
+    .map((s: any) => {
+      const schemaName = s.data?.name || '';
+      
+      // Buscar relaciones entrantes de otros esquemas (REQ 4 - Relaciones Simétricas)
+      const incomingRelations: TreeNode[] = [];
+      schemas.forEach((otherSchema: any) => {
+        const otherFields = otherSchema.data?.fields || [];
+        otherFields.forEach((field: any) => {
+          if (field.type === 'relation' && field.config?.relation?.entity === schemaName) {
+            incomingRelations.push({
+              id: `fk-${otherSchema.id}-${field.id}`,
+              label: `← Relación: ${otherSchema.data?.name || 'sin_nombre'} (${field.key})`,
+              icon: Database,
+              data: null // no seleccionable
+            });
+          }
+          // Buscar en subcampos anidados
+          const subFields = field.fields || [];
+          subFields.forEach((sub: any) => {
+            if (sub.type === 'relation' && sub.config?.relation?.entity === schemaName) {
+              incomingRelations.push({
+                id: `fk-sub-${otherSchema.id}-${sub.id}`,
+                label: `← Relación: ${otherSchema.data?.name || 'sin_nombre'} (${field.key}.${sub.key})`,
+                icon: Database,
+                data: null // no seleccionable
+              });
+            }
+          });
+        });
+      });
 
-  const scriptNodes = useMemo<TreeNode[]>(() => scripts.map((s: any) => ({
-    id: s.id,
-    label: s.data?.name || 'sin_nombre_script',
-    icon: Zap,
-    badge: s.data?.trigger || 'onSave',
-    data: s
-  })), [scripts]);
+      const hasFks = incomingRelations.length > 0;
+
+      return {
+        id: s.id,
+        label: schemaName || 'sin_nombre',
+        icon: FileJson,
+        badge: `${s.data?.fields?.length ?? 0} Flds`,
+        data: s,
+        children: hasFks ? incomingRelations : undefined,
+        isExpandable: hasFks
+      };
+    }), [schemas]);
+
+  const scriptNodes = useMemo<TreeNode[]>(() => [...scripts]
+    .sort((a, b) => Number(a.data?.order ?? 0) - Number(b.data?.order ?? 0))
+    .map((s: any) => ({
+      id: s.id,
+      label: s.data?.name || 'sin_nombre_script',
+      icon: Zap,
+      badge: s.data?.trigger || 'onSave',
+      data: s
+    })), [scripts]);
+
+  const unifiedNodes = useMemo<TreeNode[]>(() => [
+    {
+      id: 'root-routes',
+      label: 'Rutas y Sitemap',
+      icon: RouteIcon,
+      badge: routeNodes.length,
+      isVirtualRoot: true,
+      children: routeNodes,
+      onAdd: handleAddRoute,
+      addLabel: 'Registrar Nueva Ruta'
+    },
+    {
+      id: 'root-schemas',
+      label: 'Blueprints del DNA',
+      icon: FileJson,
+      badge: schemaNodes.length,
+      isVirtualRoot: true,
+      children: schemaNodes,
+      onAdd: handleAddSchema,
+      addLabel: 'Diseñar Nuevo Blueprint'
+    },
+    {
+      id: 'root-logic',
+      label: 'Lógica y Scripts',
+      icon: Zap,
+      badge: scriptNodes.length,
+      isVirtualRoot: true,
+      children: scriptNodes,
+      onAdd: handleAddScript,
+      addLabel: 'Registrar Evento Script'
+    },
+  ], [routeNodes, schemaNodes, scriptNodes]);
+
+  const handleReorder = async (category: 'routes' | 'schemas' | 'scripts', activeId: string, overId: string) => {
+    const items = category === 'routes' ? routes : category === 'schemas' ? schemas : scripts;
+    const oldIndex = items.findIndex((item: any) => item.id === activeId);
+    const newIndex = items.findIndex((item: any) => item.id === overId);
+    
+    if (oldIndex === -1 || newIndex === -1 || oldIndex === newIndex) return;
+
+    const reordered = arrayMove(items, oldIndex, newIndex);
+    const context = category === 'routes' ? SYSTEM_NS.ROUTES : category === 'schemas' ? SYSTEM_NS.SCHEMAS : 'scripts';
+
+    try {
+      await Promise.all(
+        reordered.map((item: any, index: number) =>
+          saveItem(context, {
+            ...item,
+            data: {
+              ...(item.data || {}),
+              order: index
+            }
+          })
+        )
+      );
+      toast.success(`Ordenación de ${category === 'routes' ? 'Rutas' : category === 'schemas' ? 'Blueprints' : 'Scripts'} actualizada`);
+    } catch (e: any) {
+      toast.error(`Error al persistir reordenamiento: ${e.message || e}`);
+    }
+  };
+
+  const handleSelectNode = (node: TreeNode) => {
+    if (node.isVirtualRoot) return;
+    if (node.data === null) return;
+    const parentId = node.id;
+    if (routes.some((r: any) => r.id === parentId)) {
+      setSelectedRouteId(parentId);
+      setSelectedSchemaId(null);
+      setSelectedScriptId(null);
+    } else if (schemas.some((s: any) => s.id === parentId)) {
+      setSelectedSchemaId(parentId);
+      setSelectedRouteId(null);
+      setSelectedScriptId(null);
+    } else if (scripts.some((s: any) => s.id === parentId)) {
+      setSelectedScriptId(parentId);
+      setSelectedRouteId(null);
+      setSelectedSchemaId(null);
+    }
+  };
+
+  const RAIL = [
+    { id: 'dna'    as const, icon: FileJson, label: 'DNA & Rutas' },
+    { id: 'users'  as const, icon: Users,    label: 'Gestión de Acceso' },
+    { id: 'tokens' as const, icon: Palette,  label: 'Design Tokens' },
+    { id: 'silo'   as const, icon: Shield,   label: 'Config del Silo' },
+  ];
 
   return (
     <div className="flex h-full w-full bg-background overflow-hidden select-none">
 
-      {/* ────────────────────────────────────────────────────────────────────── */}
-      {/* PANEL 1: CONFIG (NÚCLEO Y PASAPORTE) ─ Hover-Collapsible (Stage 2)     */}
-      {/* ────────────────────────────────────────────────────────────────────── */}
-      <aside
-        className={cn(
-          "border-r flex flex-col shrink-0 bg-muted/15 transition-all duration-300 ease-in-out z-30 shadow-sm",
-          isConfigOpen ? "w-72" : "w-16"
-        )}
-        onMouseEnter={() => setIsConfigOpen(true)}
-        onMouseLeave={() => setIsConfigOpen(false)}
-      >
-        <div className={cn(
-          "p-4 border-b flex items-center justify-between bg-background transition-all duration-300 h-14",
-          isConfigOpen ? "px-4" : "px-0 justify-center"
-        )}>
-          {isConfigOpen ? (
-            <>
-              <div className="flex items-center gap-2">
-                <Shield size={16} className="text-primary animate-pulse" />
-                <span className="text-[10px] font-black uppercase tracking-widest text-foreground">Sovereign Núcleo</span>
-              </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={handleRefresh}
-                className="w-7 h-7 rounded-full text-muted-foreground hover:text-foreground"
-              >
-                <RotateCcw size={12} />
-              </Button>
-            </>
-          ) : (
-            <Shield size={18} className="text-primary animate-pulse" />
-          )}
+      {/* ── RAIL: activador de módulos ────────────────────────────── */}
+      <aside className="w-14 border-r flex flex-col items-center pt-4 pb-5 bg-muted/15 shrink-0 gap-1">
+        <div className="mb-4">
+          <Shield size={18} className="text-primary animate-pulse" />
         </div>
 
-        {isConfigOpen ? (
-          <div className="flex-1 overflow-y-auto p-4 space-y-4 animate-in fade-in duration-300">
+        {RAIL.map(({ id, icon: Icon, label }) => (
+          <button
+            key={id}
+            onClick={() => setActiveMode(id)}
+            title={label}
+            className={cn(
+              'w-10 h-10 rounded-lg flex items-center justify-center transition-colors',
+              activeMode === id
+                ? 'bg-primary text-primary-foreground'
+                : 'text-muted-foreground hover:bg-muted hover:text-foreground'
+            )}
+          >
+            <Icon size={16} />
+          </button>
+        ))}
+
+        <div className="mt-auto">
+          <button
+            onClick={handleRefresh}
+            title="Sincronizar Estado"
+            className="w-10 h-10 rounded-lg flex items-center justify-center text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+          >
+            <RotateCcw size={14} />
+          </button>
+        </div>
+      </aside>
+
+      {/* ── NAVIGATOR: solo visible en modo dna ──────────────────── */}
+      {activeMode === 'dna' && (
+        <aside className="w-80 border-r flex flex-col shrink-0 bg-background overflow-hidden">
+          <div className="h-14 px-4 border-b flex items-center bg-muted/5 shrink-0">
+            <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground/80">Jerarquía del Sistema</span>
+          </div>
+          <div className="flex-1 overflow-y-auto p-4">
+            <AgnosticTreeView
+              nodes={unifiedNodes}
+              selectedId={selectedRouteId || selectedSchemaId || selectedScriptId}
+              onSelect={handleSelectNode}
+              onReorder={handleReorder}
+              emptyMessage="Cargando estructuras de realidad..."
+            />
+          </div>
+          <div className="p-3 border-t bg-muted/10 shrink-0">
+            <Button
+              onClick={() => setShowImport(true)}
+              variant="outline"
+              className="w-full h-10 rounded-xl border-dashed border-primary/20 hover:border-primary/50 text-[10px] font-black tracking-widest uppercase gap-2 hover:bg-primary/5 transition-all shadow-sm"
+            >
+              <Database size={13} className="text-primary animate-pulse" />
+              Importar Estructura (Wizard)
+            </Button>
+          </div>
+        </aside>
+      )}
+
+      {/* ── CANVAS: cambia según activeMode ──────────────────────── */}
+      <main className="flex-1 overflow-hidden">
+        {activeMode === 'dna' && (
+          <div className="h-full overflow-y-auto p-8 bg-muted/5">
+            {selectedRouteId && (
+              <RouteEditor
+                routeId={selectedRouteId}
+                routes={routes}
+                schemas={schemas}
+                tokens={tokens}
+                userLists={userLists}
+                onSave={handleSaveRoute}
+                onRemove={handleRemoveRoute}
+              />
+            )}
+            {selectedSchemaId && (
+              <SchemaEditor
+                schemaId={selectedSchemaId}
+                schemas={schemas}
+                onSave={handleSaveSchema}
+                onRemove={handleRemoveSchema}
+              />
+            )}
+            {selectedScriptId && (
+              <ScriptEditor
+                scriptId={selectedScriptId}
+                scripts={scripts}
+                onSave={handleSaveScript}
+                onRemove={handleRemoveScript}
+              />
+            )}
+            {!selectedRouteId && !selectedSchemaId && !selectedScriptId && <EmptyEditorState />}
+          </div>
+        )}
+
+        {activeMode === 'tokens' && (
+          <div className="h-full overflow-y-auto p-8">
+            <TokensEditor
+              tokens={tokens as any[]}
+              onAdd={handleAddToken}
+              onSave={handleSaveToken}
+              onRemove={handleRemoveToken}
+            />
+          </div>
+        )}
+
+        {activeMode === 'users' && <UserManager />}
+
+        {activeMode === 'silo' && (
+          <div className="h-full overflow-y-auto p-8 max-w-2xl">
             <SystemSection config={config} setConfig={handleUpdateConfig} />
           </div>
-        ) : (
-          <div className="flex-1 flex flex-col items-center py-6 gap-2 text-muted-foreground">
-            <button
-              onClick={() => setIsConfigOpen(true)}
-              className="p-2.5 hover:bg-muted rounded-lg transition-colors w-10 h-10 flex items-center justify-center"
-              title="Configurar Silo y Tokens"
-            >
-              <Shield size={16} className="text-primary animate-pulse" />
-            </button>
-            <button
-              onClick={() => setIsConfigOpen(true)}
-              className="p-2.5 hover:bg-muted rounded-lg transition-colors w-10 h-10 flex items-center justify-center"
-              title="Estrategia de Persistencia"
-            >
-              <Database size={16} className="text-muted-foreground" />
-            </button>
-            <button
-              onClick={() => setIsConfigOpen(true)}
-              className="p-2.5 hover:bg-muted rounded-lg transition-colors w-10 h-10 flex items-center justify-center"
-              title="Design Tokens"
-            >
-              <Palette size={16} className="text-muted-foreground" />
-            </button>
-            <div className="mt-auto">
-              <button
-                onClick={handleRefresh}
-                className="p-2.5 hover:bg-muted rounded-lg transition-colors w-10 h-10 flex items-center justify-center"
-                title="Sincronizar Estado"
-              >
-                <RotateCcw size={14} className="text-muted-foreground" />
-              </button>
-            </div>
-          </div>
-        )}
-      </aside>
-
-      {/* ────────────────────────────────────────────────────────────────────── */}
-      {/* PANEL 2: JERARQUÍA / 3 TABS DE NAVEGACIÓN PURA ─ Fijo 320px (Stage 1)  */}
-      {/* ────────────────────────────────────────────────────────────────────── */}
-      <aside className="w-80 border-r flex flex-col shrink-0 bg-background">
-        <Tabs value={centerTab} onValueChange={(val: any) => setCenterTab(val)} className="flex-1 flex flex-col overflow-hidden">
-          <TabsList className="w-full rounded-none border-b h-14 px-3 bg-muted/20 gap-1">
-            <TabsTrigger value="routes" className="flex-1 text-[10px] font-black uppercase tracking-wider h-8">Rutas</TabsTrigger>
-            <TabsTrigger value="schemas" className="flex-1 text-[10px] font-black uppercase tracking-wider h-8">Esquemas</TabsTrigger>
-            <TabsTrigger value="logic" className="flex-1 text-[10px] font-black uppercase tracking-wider h-8">Lógica</TabsTrigger>
-          </TabsList>
-
-          {/* Rutas Tree View */}
-          <TabsContent value="routes" className="flex-1 overflow-y-auto p-4 m-0">
-            <AgnosticTreeView
-              nodes={routeNodes}
-              selectedId={selectedRouteId}
-              onSelect={(node) => {
-                setSelectedRouteId(node.id);
-                setSelectedSchemaId(null);
-                setSelectedScriptId(null);
-              }}
-              onAdd={handleAddRoute}
-              addLabel="Registrar Nueva Ruta"
-              emptyMessage="No hay rutas definidas en el sitemap."
-            />
-          </TabsContent>
-
-          {/* Esquemas Tree View */}
-          <TabsContent value="schemas" className="flex-1 overflow-y-auto p-4 m-0">
-            <AgnosticTreeView
-              nodes={schemaNodes}
-              selectedId={selectedSchemaId}
-              onSelect={(node) => {
-                setSelectedSchemaId(node.id);
-                setSelectedRouteId(null);
-                setSelectedScriptId(null);
-              }}
-              onAdd={handleAddSchema}
-              addLabel="Diseñar Nuevo Blueprint"
-              emptyMessage="No hay blueprints definidos en el DNA."
-            />
-          </TabsContent>
-
-          {/* Lógica Tree View */}
-          <TabsContent value="logic" className="flex-1 overflow-y-auto p-4 m-0">
-            <AgnosticTreeView
-              nodes={scriptNodes}
-              selectedId={selectedScriptId}
-              onSelect={(node) => {
-                setSelectedScriptId(node.id);
-                setSelectedRouteId(null);
-                setSelectedSchemaId(null);
-              }}
-              onAdd={handleAddScript}
-              addLabel="Registrar Evento Script"
-              emptyMessage="No hay scripts de lógica definidos."
-            />
-          </TabsContent>
-        </Tabs>
-
-        {/* 🗃️ IMPORT WIZARD ENTRY DRAWER */}
-        <div className="p-3 border-t bg-muted/10 shrink-0">
-          <Button
-            onClick={() => setShowImport(true)}
-            variant="outline"
-            className="w-full h-10 rounded-xl border-dashed border-primary/20 hover:border-primary/50 text-[10px] font-black tracking-widest uppercase gap-2 hover:bg-primary/5 transition-all shadow-sm"
-          >
-            <Database size={13} className="text-primary animate-pulse" />
-            Importar Estructura (Wizard)
-          </Button>
-        </div>
-      </aside>
-
-      {/* ────────────────────────────────────────────────────────────────────── */}
-      {/* PANEL 3: EDITOR CONTEXTUAL REACTIVO ─ Flex-1                           */}
-      {/* ────────────────────────────────────────────────────────────────────── */}
-      <main className="flex-1 overflow-y-auto p-8 bg-muted/5">
-        {selectedRouteId && (
-          <RouteEditor
-            routeId={selectedRouteId}
-            routes={routes}
-            schemas={schemas}
-            onSave={handleSaveRoute}
-            onRemove={handleRemoveRoute}
-          />
-        )}
-        {selectedSchemaId && (
-          <SchemaEditor
-            schemaId={selectedSchemaId}
-            schemas={schemas}
-            onSave={handleSaveSchema}
-            onRemove={handleRemoveSchema}
-          />
-        )}
-        {selectedScriptId && (
-          <ScriptEditor
-            scriptId={selectedScriptId}
-            scripts={scripts}
-            onSave={handleSaveScript}
-            onRemove={handleRemoveScript}
-          />
-        )}
-        {!selectedRouteId && !selectedSchemaId && !selectedScriptId && (
-          <EmptyEditorState />
         )}
       </main>
-
-      {/* ────────────────────────────────────────────────────────────────────── */}
-      {/* PANEL 4: BARRA EXTREMA DERECHA (SMART TAGGING - Stage 4)               */}
-      {/* ────────────────────────────────────────────────────────────────────── */}
-      <aside className="w-12 border-l flex flex-col shrink-0 items-center py-6 bg-muted/10 text-muted-foreground gap-6">
-        <div className="p-2 hover:bg-muted hover:text-primary rounded-lg transition-colors cursor-pointer" title="Etiquetas Inteligentes (Smart Tags)">
-          <Zap size={16} />
-        </div>
-        <div className="p-2 hover:bg-muted hover:text-primary rounded-lg transition-colors cursor-pointer" title="Relaciones y Filtros Dinámicos">
-          <FileJson size={16} />
-        </div>
-        <div className="p-2 hover:bg-muted hover:text-primary rounded-lg transition-colors cursor-pointer" title="Parámetros de Rejilla y Layout">
-          <Layout size={16} />
-        </div>
-        <div className="p-2 hover:bg-muted hover:text-primary rounded-lg transition-colors cursor-pointer mt-auto" title="Ayuda Axiomática">
-          <Info size={16} />
-        </div>
-      </aside>
 
       {/* modal de confirmación AlertDialog premium (Stage 4) */}
       <Dialog open={!!pendingDelete} onOpenChange={(open) => !open && setPendingDelete(null)}>
@@ -501,12 +574,16 @@ function RouteEditor({
   routeId,
   routes,
   schemas,
+  tokens,
+  userLists,
   onSave,
   onRemove
 }: {
   routeId: string;
   routes: any[];
   schemas: any[];
+  tokens: any[];
+  userLists: any[];
   onSave: (id: string, patch: any) => Promise<void>;
   onRemove: (id: string) => Promise<void>;
 }) {
@@ -536,28 +613,33 @@ function RouteEditor({
     }
   };
 
-  const handleAddBlock = () => {
-    setLocalData((prev: any) => ({
-      ...prev,
-      blocks: [...(prev.blocks || []), { type: 'form', schema_id: '', config: {} }]
+  const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
+
+  // Helper function to build TreeNode[] from blocks recursively
+  const buildLayerTree = (blocks: any[]): TreeNode[] => {
+    return blocks.map(block => ({
+      id: block.id || crypto.randomUUID(),
+      label: block.config?.label ?? block.title ?? block.type,
+      icon: block.type === 'frame' ? Box
+          : block.type === 'text'  ? Layout
+          : block.type === 'image' ? Palette
+          : block.type === 'form'  ? FileJson
+          : Shield,
+      data: block,
+      children: block.blocks?.length > 0 ? buildLayerTree(block.blocks) : undefined,
+      isExpandable: (block.blocks?.length ?? 0) > 0,
     }));
   };
 
-  const handleUpdateBlock = (idx: number, blockPatch: any) => {
-    setLocalData((prev: any) => {
-      const blocks = [...(prev.blocks || [])];
-      blocks[idx] = { ...blocks[idx], ...blockPatch };
-      return { ...prev, blocks };
+  // Helper function to update node recursively in tree
+  const updateNodeInTree = (blocks: any[], targetId: string, patch: any): any[] => {
+    return blocks.map(block => {
+      if (block.id === targetId) return { ...block, ...patch };
+      if (block.blocks?.length > 0) {
+        return { ...block, blocks: updateNodeInTree(block.blocks, targetId, patch) };
+      }
+      return block;
     });
-  };
-
-  const handleRemoveBlock = (idx: number) => {
-    if (!confirm('¿Eliminar este bloque del layout?'))
-      return;
-    setLocalData((prev: any) => ({
-      ...prev,
-      blocks: (prev.blocks || []).filter((_: any, i: number) => i !== idx)
-    }));
   };
 
   return (
@@ -660,52 +742,144 @@ function RouteEditor({
         </div>
       </div>
 
-      {/* Composición de Bloques */}
-      <div className="space-y-6">
+      {/* Permisos de acceso — allowed_lists */}
+      <div className="bg-background border rounded-2xl p-6 shadow-sm">
+        <label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground block mb-3">
+          Acceso Permitido
+        </label>
+        <p className="text-[10px] text-muted-foreground mb-2">
+          {((localData.allowed_lists ?? []) as string[]).length === 0
+            ? 'Página pública — sin restricción de acceso'
+            : 'Solo usuarios en las listas seleccionadas (admin siempre incluido)'}
+        </p>
+        <div className="flex flex-wrap gap-1.5">
+          {userLists.map((list: any) => {
+            const name = list.data?.name as string;
+            const active = ((localData.allowed_lists ?? []) as string[]).includes(name);
+            return (
+              <button
+                key={list.id}
+                onClick={() => {
+                  const current: string[] = (localData.allowed_lists ?? []) as string[];
+                  setLocalData((prev: any) => ({
+                    ...prev,
+                    allowed_lists: active
+                      ? current.filter(t => t !== name)
+                      : [...current, name]
+                  }));
+                }}
+                className={cn(
+                  'px-2.5 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wide transition-all',
+                  active ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground hover:bg-muted/60'
+                )}
+              >
+                {name}
+              </button>
+            );
+          })}
+          {userLists.length === 0 && (
+            <p className="text-[10px] text-muted-foreground italic">Sin listas definidas. Crea listas en el módulo de Acceso.</p>
+          )}
+        </div>
+      </div>
+
+      {/* Composición de Bloques en 2 Columnas (Árbol + Editor Paramétrico) */}
+      <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h3 className="text-xs font-black uppercase tracking-widest text-muted-foreground">
-            Árbol de Bloques de la Interfaz
+            Capas del Layout
           </h3>
           <Button
-            onClick={handleAddBlock}
+            onClick={() => {
+              const newBlock = { 
+                id: crypto.randomUUID(), 
+                type: 'frame', 
+                title: 'Nuevo Frame', 
+                direction: 'vertical', 
+                blocks: [] 
+              };
+              setLocalData((prev: any) => ({
+                ...prev,
+                blocks: [...(prev.blocks || []), newBlock]
+              }));
+              setSelectedBlockId(newBlock.id);
+            }}
             variant="outline"
             size="sm"
             className="text-[10px] font-black uppercase tracking-widest border-dashed gap-2"
           >
-            <Plus size={12} /> Añadir Bloque al Layout
+            <Plus size={12} /> Añadir Frame
           </Button>
         </div>
 
         {(localData.blocks || []).length === 0 ? (
           <div className="text-center py-12 text-xs font-semibold text-muted-foreground border border-dashed rounded-2xl bg-background">
-            Esta página no contiene bloques. Añade tu primer bloque para empezar a componer.
+            Sin bloques. Añade un Frame para empezar a componer.
           </div>
         ) : (
-          <div className="space-y-4">
-            {(localData.blocks || []).map((block: any, idx: number) => (
-              <div key={block.id || idx} className="bg-background border rounded-2xl p-6 shadow-sm hover:border-primary/20 transition-all relative group">
-                <div className="absolute top-6 right-6 z-10 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    onClick={() => handleRemoveBlock(idx)}
-                    className="w-8 h-8 rounded-full text-destructive/40 hover:text-destructive hover:bg-destructive/5"
-                  >
-                    <Trash2 size={14} />
-                  </Button>
+          <div className="grid grid-cols-[260px_1fr] gap-4 min-h-[400px]">
+            
+            {/* Panel izquierdo: árbol de capas */}
+            <div className="border rounded-2xl p-3 bg-muted/10 overflow-y-auto max-h-[600px]">
+              <AgnosticTreeView
+                nodes={buildLayerTree(localData.blocks || [])}
+                selectedId={selectedBlockId}
+                onSelect={(node) => setSelectedBlockId(node.id)}
+              />
+            </div>
+
+            {/* Panel derecho: propiedades del nodo seleccionado */}
+            <div className="border rounded-2xl p-5 bg-background overflow-y-auto max-h-[600px]">
+              {!selectedBlockId ? (
+                <div className="flex items-center justify-center h-full text-xs text-muted-foreground font-semibold py-12">
+                  Selecciona una capa para editar sus propiedades
                 </div>
-                <div className="mb-4 flex items-center gap-2 text-xs font-bold text-muted-foreground border-b pb-3 uppercase tracking-widest">
-                  <Layout size={12} />
-                  <span>Bloque #{idx + 1} ({block.type})</span>
-                </div>
-                <RecursiveBlockComposer
-                  block={block}
-                  schemas={schemas}
-                  onUpdate={(patch) => handleUpdateBlock(idx, patch)}
-                  onRemove={() => handleRemoveBlock(idx)}
-                />
-              </div>
-            ))}
+              ) : (() => {
+                const findBlock = (blocks: any[], id: string): any => {
+                  for (const b of blocks) {
+                    if (b.id === id) return b;
+                    if (b.blocks?.length) {
+                      const found = findBlock(b.blocks, id);
+                      if (found) return found;
+                    }
+                  }
+                  return null;
+                };
+                const selectedBlock = findBlock(localData.blocks || [], selectedBlockId);
+                if (!selectedBlock) return null;
+                
+                return (
+                  <RecursiveBlockComposer
+                    key={selectedBlockId}
+                    block={selectedBlock}
+                    schemas={schemas}
+                    tokens={tokens}
+                    hideChildren={true}
+                    onUpdate={(patch) => {
+                      setLocalData((prev: any) => ({
+                        ...prev,
+                        blocks: updateNodeInTree(prev.blocks || [], selectedBlockId, patch)
+                      }));
+                    }}
+                    onRemove={() => {
+                      if (!confirm('¿Eliminar este bloque del layout?')) return;
+                      const removeFromTree = (blocks: any[], id: string): any[] =>
+                        blocks
+                          .filter(b => b.id !== id)
+                          .map(b => b.blocks?.length
+                            ? { ...b, blocks: removeFromTree(b.blocks, id) }
+                            : b
+                          );
+                      setLocalData((prev: any) => ({
+                        ...prev,
+                        blocks: removeFromTree(prev.blocks || [], selectedBlockId)
+                      }));
+                      setSelectedBlockId(null);
+                    }}
+                  />
+                );
+              })()}
+            </div>
           </div>
         )}
       </div>
@@ -729,32 +903,75 @@ function SchemaEditor({
   const schema = useMemo(() => schemas.find((s: any) => s.id === schemaId), [schemas, schemaId]);
 
   const [localName, setLocalName] = useState('');
-  const [localFields, setLocalFields] = useState<any[]>([]);
-  const [isSaving, setIsSaving] = useState(false);
+  const [localFields, setLocalFields] = useState<SchemaField[]>([]);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [openFieldSettingsIdx, setOpenFieldSettingsIdx] = useState<number | null>(null);
+
+  const existingSections = useMemo(() => {
+    return [...new Set(localFields.map((f: any) => f.section).filter(Boolean))] as string[];
+  }, [localFields]);
+
+  const schemaIdRef = useRef(schemaId);
+  const localNameRef = useRef(localName);
+  const localFieldsRef = useRef(localFields);
+
+  const isDirty =
+    !!schema &&
+    schema.id === schemaId &&
+    (localName !== (schema.data?.name || '') ||
+      JSON.stringify(localFields) !== JSON.stringify(schema.data?.fields || []));
+
+  const isDirtyRef = useRef(isDirty);
+
+  useEffect(() => {
+    schemaIdRef.current = schemaId;
+    localNameRef.current = localName;
+    localFieldsRef.current = localFields;
+    isDirtyRef.current = isDirty;
+  }, [schemaId, localName, localFields, isDirty]);
+
+  const saveImmediately = async (targetId: string, name: string, fields: any[]) => {
+    if (!name.trim()) return;
+    setSaveStatus('saving');
+    try {
+      await onSave(targetId, { name, fields });
+      setSaveStatus('saved');
+      setTimeout(() => setSaveStatus('idle'), 2000);
+    } catch (e) {
+      setSaveStatus('idle');
+    }
+  };
 
   // Sincronizar estado local cuando se cambia de schema seleccionado
   useEffect(() => {
+    if (isDirtyRef.current && schemaIdRef.current && schemaIdRef.current !== schemaId) {
+      saveImmediately(schemaIdRef.current, localNameRef.current, localFieldsRef.current);
+    }
+
     if (schema) {
       setLocalName(schema.data?.name || '');
       setLocalFields(schema.data?.fields || []);
     }
   }, [schemaId]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Guardar al desmontar
+  useEffect(() => {
+    return () => {
+      if (isDirtyRef.current && schemaIdRef.current) {
+        onSave(schemaIdRef.current, { name: localNameRef.current, fields: localFieldsRef.current });
+      }
+    };
+  }, []);
+
+  const debouncedName = useDebounce(localName, 800);
+  const debouncedFields = useDebounce(localFields, 800);
+
+  useEffect(() => {
+    if (!isDirty) return;
+    saveImmediately(schemaId, debouncedName, debouncedFields);
+  }, [debouncedName, debouncedFields]); // eslint-disable-line react-hooks/exhaustive-deps
+
   if (!schema) return <div className="text-sm font-semibold opacity-40">Buscando blueprint del DNA...</div>;
-
-  const isDirty =
-    localName !== (schema.data?.name || '') ||
-    JSON.stringify(localFields) !== JSON.stringify(schema.data?.fields || []);
-
-  const handleSave = async () => {
-    setIsSaving(true);
-    try {
-      await onSave(schemaId, { name: localName, fields: localFields });
-    } finally {
-      setIsSaving(false);
-    }
-  };
 
   const handleAddField = () => {
     setLocalFields(prev => [...prev, {
@@ -791,18 +1008,40 @@ function SchemaEditor({
             Arquitectura de estructuras de datos y planos de información
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          {isDirty && (
-            <Button
-              onClick={handleSave}
-              disabled={isSaving}
-              size="sm"
-              className="text-[10px] font-black uppercase tracking-widest h-9 rounded-xl gap-2"
-            >
-              <Sparkles size={12} />
-              {isSaving ? 'Guardando...' : 'Guardar Esquema'}
-            </Button>
-          )}
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest">
+            {saveStatus === 'saving' && <span className="text-muted-foreground animate-pulse">Guardando...</span>}
+            {saveStatus === 'saved' && <span className="text-primary/60">✓ Guardado</span>}
+          </div>
+
+          {/* Dynamic Live Data Capture Form Trigger (REQ 6) */}
+          <Sheet>
+            <SheetTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                className="border-primary/20 hover:border-primary/50 text-primary hover:bg-primary/5 font-bold uppercase text-[10px] tracking-widest gap-2 shadow-sm"
+              >
+                <Database size={14} /> Capturar Datos (Live)
+              </Button>
+            </SheetTrigger>
+            <SheetContent className="w-full sm:max-w-md overflow-y-auto bg-background border-l shadow-2xl">
+              <SheetHeader className="border-b pb-4 mb-4 text-left">
+                <SheetTitle className="text-sm font-black uppercase tracking-widest text-primary flex items-center gap-2">
+                  <Database size={16} /> Capturar en Caliente: {localName || 'Silo'}
+                </SheetTitle>
+                <SheetDescription className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">
+                  Generar y simular registros instantáneos en la base de datos a partir del blueprint actual.
+                </SheetDescription>
+              </SheetHeader>
+              <AgnosticFormEmbed
+                schemaName={localName}
+                fields={localFields}
+                isDirty={isDirty}
+              />
+            </SheetContent>
+          </Sheet>
+
           <Button
             variant="ghost"
             size="sm"
@@ -831,23 +1070,23 @@ function SchemaEditor({
 
       {/* Lista de Átomos (Inline Row Editor) */}
       <div className="space-y-6">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between border-b pb-2">
           <h3 className="text-xs font-black uppercase tracking-widest text-muted-foreground">
             Campos Estructurales (Átomos)
           </h3>
-          <Button
-            onClick={handleAddField}
-            variant="outline"
-            size="sm"
-            className="text-[10px] font-black uppercase tracking-widest border-dashed gap-2"
-          >
-            <Plus size={12} /> Añadir Nuevo Campo
-          </Button>
         </div>
 
         {localFields.length === 0 ? (
-          <div className="text-center py-12 text-xs font-semibold text-muted-foreground border border-dashed rounded-2xl bg-background">
-            Este esquema no tiene campos aún. Diseña los primeros campos de información.
+          <div className="text-center py-12 text-xs font-semibold text-muted-foreground border border-dashed rounded-2xl bg-background flex flex-col items-center justify-center gap-4">
+            <span>Este esquema no tiene campos aún. Diseña los primeros campos de información.</span>
+            <Button
+              onClick={handleAddField}
+              variant="outline"
+              size="sm"
+              className="text-[10px] font-black uppercase tracking-widest border-dashed gap-2 w-48"
+            >
+              <Plus size={12} /> Diseñar Primer Campo
+            </Button>
           </div>
         ) : (
           <div className="space-y-3">
@@ -903,6 +1142,8 @@ function SchemaEditor({
                           <SelectItem value="boolean" className="font-bold text-xs">Booleano</SelectItem>
                           <SelectItem value="textarea" className="font-bold text-xs">Área de Texto</SelectItem>
                           <SelectItem value="relation" className="font-bold text-xs">Relación (FK)</SelectItem>
+                          <SelectItem value="object" className="font-bold text-xs">Objeto Anidado</SelectItem>
+                          <SelectItem value="array_of_objects" className="font-bold text-xs">Lista de Objetos</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -925,9 +1166,9 @@ function SchemaEditor({
                             <SelectValue placeholder="Elegir parent blueprint" />
                           </SelectTrigger>
                           <SelectContent>
-                            {schemas.map((s: any) => (
-                              <SelectItem key={s.id} value={s.data?.name || ''} className="font-bold text-xs">
-                                {s.data?.name || 'sin_nombre'}
+                            {schemas.filter((s: any) => s.data?.name).map((s: any) => (
+                              <SelectItem key={s.id} value={s.data.name} className="font-bold text-xs">
+                                {s.data.name}
                               </SelectItem>
                             ))}
                           </SelectContent>
@@ -985,79 +1226,48 @@ function SchemaEditor({
                     </div>
                   </div>
 
-                  {/* 🧬 COLLAPSIBLE ADVANCED SETTINGS PANEL */}
+                  {/* Sub-campos anidados (REQ 4) */}
+                  {(field.type === 'object' || field.type === 'array_of_objects') && (
+                    <SubFieldEditor
+                      fields={field.fields || []}
+                      onChange={(updated) => handleUpdateField(idx, { fields: updated })}
+                      schemas={schemas}
+                    />
+                  )}
+
+                  {/* 🧬 COLLAPSIBLE ADVANCED SETTINGS PANEL (REQ 1 + REQ 5) */}
                   {openFieldSettingsIdx === idx && (
-                    <div className="w-full border-t border-dashed border-border/60 pt-4 mt-2 grid grid-cols-1 md:grid-cols-3 gap-4 animate-in slide-in-from-top-2 duration-300">
-
-                      {/* Sección Organizativa */}
-                      <div className="space-y-1">
-                        <label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Sección Visual (Tab)</label>
-                        <Input
-                          value={field.section || 'General'}
-                          onChange={(e) => handleUpdateField(idx, { section: e.target.value })}
-                          placeholder="Ej. General, Facturación"
-                          className="font-bold text-xs h-9 bg-muted/5 border-muted/80 focus-visible:ring-primary/20"
+                    <div className="w-full border-t border-dashed border-border/60 pt-4 mt-2 space-y-4 animate-in slide-in-from-top-2 duration-300">
+                      
+                      {/* Sección Organizativa (Tab) */}
+                      <div className="space-y-1 max-w-xs">
+                        <label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground block">
+                          Sección Visual (Tab)
+                        </label>
+                        <SectionCombobox
+                          value={field.section ?? ''}
+                          options={existingSections}
+                          onChange={(val) => handleUpdateField(idx, { section: val })}
                         />
                       </div>
 
-                      {/* Ancho del Campo */}
-                      <div className="space-y-1">
-                        <label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Ancho Visual</label>
-                        <Select
-                          value={field.width || 'full'}
-                          onValueChange={(val) => handleUpdateField(idx, { width: val })}
-                        >
-                          <SelectTrigger className="h-9 font-bold text-xs bg-muted/5 border-muted/80 focus:ring-primary/20">
-                            <SelectValue placeholder="Seleccionar ancho" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="full" className="font-bold text-xs">Completo (100%)</SelectItem>
-                            <SelectItem value="half" className="font-bold text-xs">Mitad (50%)</SelectItem>
-                            <SelectItem value="third" className="font-bold text-xs">Un Tercio (33%)</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-
-                      {/* Placeholder de Entrada */}
-                      <div className="space-y-1">
-                        <label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">Placeholder / Indicación</label>
-                        <Input
-                          value={field.placeholder || ''}
-                          onChange={(e) => handleUpdateField(idx, { placeholder: e.target.value })}
-                          placeholder="Ej. Escriba sin guiones..."
-                          className="font-bold text-xs h-9 bg-muted/5 border-muted/80 focus-visible:ring-primary/20"
+                      {/* Resto de Ajustes Proyectados */}
+                      <div className="border-t border-border/10 pt-4">
+                        <AgnosticConfigProjector
+                          schema={FIELD_META_SCHEMA}
+                          data={field}
+                          onUpdate={(patch) => {
+                            // Mitigación: Escribir isPrimary en ambos lugares por compatibilidad
+                            if (patch.isPrimary !== undefined) {
+                              handleUpdateField(idx, { 
+                                isPrimary: patch.isPrimary,
+                                config: { ...(field.config || {}), isPrimary: patch.isPrimary }
+                              });
+                            } else {
+                              handleUpdateField(idx, patch);
+                            }
+                          }}
                         />
-                      </div>
-
-                      {/* Toggles booleanos avanzados */}
-                      <div className="md:col-span-3 flex flex-wrap gap-6 mt-2 border-t border-border/30 pt-3">
-                        {/* Clave Primaria */}
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            id={`prim-${field.id || idx}`}
-                            checked={!!field.isPrimary || !!field.config?.isPrimary}
-                            onChange={(e) => handleUpdateField(idx, { isPrimary: e.target.checked, config: { ...(field.config || {}), isPrimary: e.target.checked } })}
-                            className="w-4 h-4 rounded border-muted/80 bg-muted/5 text-primary focus:ring-primary/20 accent-primary cursor-pointer"
-                          />
-                          <label htmlFor={`prim-${field.id || idx}`} className="text-[9px] font-black uppercase tracking-widest text-muted-foreground select-none cursor-pointer">
-                            ¿Es Identificador Primario? (Muestra en listas/búsquedas)
-                          </label>
-                        </div>
-
-                        {/* Solo Lectura */}
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="checkbox"
-                            id={`ro-${field.id || idx}`}
-                            checked={!!field.readOnly}
-                            onChange={(e) => handleUpdateField(idx, { readOnly: e.target.checked })}
-                            className="w-4 h-4 rounded border-muted/80 bg-muted/5 text-primary focus:ring-primary/20 accent-primary cursor-pointer"
-                          />
-                          <label htmlFor={`ro-${field.id || idx}`} className="text-[9px] font-black uppercase tracking-widest text-muted-foreground select-none cursor-pointer">
-                            ¿Es de Solo Lectura? (Calculado/Fijo)
-                          </label>
-                        </div>
                       </div>
 
                     </div>
@@ -1066,6 +1276,16 @@ function SchemaEditor({
                 </div>
               );
             })}
+            <div className="pt-2">
+              <Button
+                onClick={handleAddField}
+                variant="outline"
+                size="sm"
+                className="w-full border-dashed text-[10px] font-black uppercase tracking-widest gap-2 py-5 rounded-xl hover:bg-muted/10 transition-colors"
+              >
+                <Plus size={12} /> Añadir Nuevo Campo
+              </Button>
+            </div>
           </div>
         )}
       </div>
@@ -1247,3 +1467,426 @@ function EmptyEditorState() {
     </div>
   );
 }
+
+// 5. SECTION COMBOBOX FOR FIELD EDITING (REQ 1 - Lightweight Custom Combobox)
+interface SectionComboboxProps {
+  value: string;
+  options: string[];
+  onChange: (val: string) => void;
+}
+
+function SectionCombobox({ value, options, onChange }: SectionComboboxProps) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+
+  const filteredOptions = options.filter(opt =>
+    opt.toLowerCase().includes(search.toLowerCase())
+  );
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          className="w-full justify-between font-bold text-xs h-9 bg-muted/5 border-muted/80 hover:bg-muted/10 text-left px-3"
+        >
+          <span className="truncate">{value || 'Seleccionar Sección...'}</span>
+          <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-64 p-2 bg-card border rounded-xl shadow-lg z-50">
+        <div className="flex gap-1.5 mb-2">
+          <Input
+            placeholder="Buscar o crear..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="h-8 text-xs font-semibold"
+          />
+          {search.trim() && !options.includes(search.trim()) && (
+            <Button
+              size="icon"
+              variant="ghost"
+              className="h-8 w-8 rounded-lg text-primary hover:bg-primary/10 shrink-0"
+              onClick={() => {
+                onChange(search.trim());
+                setSearch('');
+                setOpen(false);
+              }}
+              title="Añadir nueva sección"
+            >
+              <Plus size={14} />
+            </Button>
+          )}
+        </div>
+        <div className="max-h-48 overflow-y-auto space-y-1">
+          {filteredOptions.length === 0 && !search.trim() && (
+            <div className="text-[10px] text-muted-foreground p-2 text-center uppercase tracking-wider font-bold">
+              Sin secciones
+            </div>
+          )}
+          {filteredOptions.map((opt) => (
+            <div
+              key={opt}
+              onClick={() => {
+                onChange(opt);
+                setOpen(false);
+              }}
+              className={cn(
+                "flex items-center justify-between px-2 py-1.5 rounded-lg text-xs font-bold cursor-pointer transition-colors",
+                value === opt
+                  ? "bg-primary/10 text-primary"
+                  : "hover:bg-muted text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <span>{opt}</span>
+              {value === opt && <Check size={12} className="text-primary" />}
+            </div>
+          ))}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+// 6. SUBFIELD EDITOR (REQ 4 - Depth 1 Nested Editor)
+interface SubFieldEditorProps {
+  fields: SchemaField[];
+  onChange: (updatedFields: SchemaField[]) => void;
+  schemas: any[];
+}
+
+function SubFieldEditor({ fields = [], onChange, schemas }: SubFieldEditorProps) {
+  const handleAddSub = () => {
+    const newSub = {
+      id: crypto.randomUUID(),
+      key: `sub_${Date.now().toString().slice(-4)}`,
+      label: 'Sub Campo',
+      type: 'text' as const
+    };
+    onChange([...fields, newSub]);
+  };
+
+  const handleUpdateSub = (idx: number, patch: any) => {
+    const updated = [...fields];
+    updated[idx] = { ...updated[idx], ...patch };
+    onChange(updated);
+  };
+
+  const handleRemoveSub = (idx: number) => {
+    onChange(fields.filter((_, i) => i !== idx));
+  };
+
+  return (
+    <div className="w-full bg-muted/5 border border-dashed rounded-xl p-4 space-y-3 animate-in slide-in-from-top-1 duration-200 mt-2">
+      <div className="flex items-center justify-between border-b border-border/20 pb-2">
+        <label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground">
+          Estructura de Sub-campos Anidados
+        </label>
+      </div>
+
+      {fields.length === 0 ? (
+        <div className="text-[9px] text-center text-muted-foreground/60 py-4 font-bold uppercase tracking-wider">
+          Sin sub-campos definidos
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {fields.map((sub, idx) => {
+            const autoSlug = (sub.label || '')
+              .toLowerCase()
+              .trim()
+              .replace(/\s+/g, '_')
+              .replace(/[^\w-]+/g, '');
+
+            return (
+              <div key={sub.id || idx} className="flex flex-col md:flex-row md:items-center gap-3 bg-background border p-3 rounded-lg shadow-sm">
+                
+                {/* Etiqueta */}
+                <div className="flex-1 space-y-1">
+                  <label className="text-[8px] font-black uppercase tracking-widest text-muted-foreground">Etiqueta</label>
+                  <Input
+                    value={sub.label || ''}
+                    onChange={(e) => {
+                      const newLabel = e.target.value;
+                      const newKey = newLabel
+                        .toLowerCase()
+                        .trim()
+                        .replace(/\s+/g, '_')
+                        .replace(/[^\w-]+/g, '');
+                      handleUpdateSub(idx, { label: newLabel, key: newKey });
+                    }}
+                    placeholder="Ej. Nombre"
+                    className="font-bold text-xs h-8"
+                  />
+                </div>
+
+                {/* Tipo de dato simple */}
+                <div className="w-full md:w-36 space-y-1">
+                  <label className="text-[8px] font-black uppercase tracking-widest text-muted-foreground">Tipo</label>
+                  <Select
+                    value={sub.type || 'text'}
+                    onValueChange={(val) => {
+                      const patch: any = { type: val };
+                      if (val === 'relation') {
+                        patch.config = {
+                          relation: { entity: '', parent_key: 'id' }
+                        };
+                      }
+                      handleUpdateSub(idx, patch);
+                    }}
+                  >
+                    <SelectTrigger className="h-8 font-bold text-xs bg-muted/5 border-muted/80">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="text" className="font-bold text-xs">Texto</SelectItem>
+                      <SelectItem value="number" className="font-bold text-xs">Número</SelectItem>
+                      <SelectItem value="date" className="font-bold text-xs">Fecha</SelectItem>
+                      <SelectItem value="boolean" className="font-bold text-xs">Booleano</SelectItem>
+                      <SelectItem value="relation" className="font-bold text-xs">Relación (FK)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Relación simple */}
+                {sub.type === 'relation' && (
+                  <div className="w-full md:w-36 space-y-1 animate-in fade-in duration-200">
+                    <label className="text-[8px] font-black uppercase tracking-widest text-muted-foreground">Relacionado</label>
+                    <Select
+                      value={sub.config?.relation?.entity || ''}
+                      onValueChange={(val) => {
+                        handleUpdateSub(idx, {
+                          config: {
+                            relation: { entity: val, parent_key: 'id' }
+                          }
+                        });
+                      }}
+                    >
+                      <SelectTrigger className="h-8 font-bold text-xs bg-primary/5 border-primary/20 text-primary">
+                        <SelectValue placeholder="Blueprint" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {schemas.filter((s: any) => s.data?.name).map((s: any) => (
+                          <SelectItem key={s.id} value={s.data.name} className="font-bold text-xs">
+                            {s.data.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
+
+                {/* Slug key */}
+                <div className="w-full md:w-28 space-y-1">
+                  <label className="text-[8px] font-black uppercase tracking-widest text-muted-foreground">Key (Slug)</label>
+                  <div className="h-8 px-2 border bg-muted/20 rounded-md flex items-center justify-between text-[10px] font-mono font-bold text-primary truncate select-all">
+                    <span>{sub.key || autoSlug || 'key'}</span>
+                  </div>
+                </div>
+
+                {/* Acciones */}
+                <div className="shrink-0 flex items-end pt-4 md:pt-0">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    onClick={() => handleRemoveSub(idx)}
+                    className="w-8 h-8 rounded-lg text-destructive/40 hover:text-destructive hover:bg-destructive/5"
+                  >
+                    <Trash2 size={12} />
+                  </Button>
+                </div>
+
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      <div className="flex justify-end pt-1">
+        <Button
+          onClick={handleAddSub}
+          variant="outline"
+          size="sm"
+          className="text-[9px] font-black uppercase tracking-widest border-dashed gap-1 h-8 rounded-lg"
+        >
+          <Plus size={10} /> Añadir Sub-campo
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+// 7. AGNOSTIC FORM EMBED (REQ 6 - Dynamic Live Data Capture Form)
+interface AgnosticFormEmbedProps {
+  schemaName: string;
+  fields: any[];
+  isDirty: boolean;
+}
+
+function AgnosticFormEmbed({ schemaName, fields, isDirty }: AgnosticFormEmbedProps) {
+  const [formData, setFormData] = useState<Record<string, any>>({});
+  const { saveItem } = useAppDispatch();
+
+  const handleInputChange = (key: string, val: any) => {
+    setFormData(prev => ({ ...prev, [key]: val }));
+  };
+
+  const handleSave = async () => {
+    // Validar requeridos
+    const missing = fields
+      .filter(f => f.required && (formData[f.key] === undefined || formData[f.key] === ''))
+      .map(f => f.label || f.key);
+
+    if (missing.length > 0) {
+      toast.error(`Campos requeridos pendientes: ${missing.join(', ')}`);
+      return;
+    }
+
+    try {
+      await saveItem(schemaName, {
+        id: crypto.randomUUID(),
+        context: schemaName,
+        data: formData
+      });
+
+      toast.success(
+        <div className="space-y-1 text-left">
+          <p className="font-bold text-xs uppercase tracking-wider text-primary">¡Registro Guardado en Caliente!</p>
+          <pre className="text-[9px] font-mono p-2 bg-muted/20 rounded border border-border/40 leading-tight max-h-32 overflow-y-auto w-64 select-all">
+            {JSON.stringify(formData, null, 2)}
+          </pre>
+        </div>,
+        { duration: 5000 }
+      );
+      // Limpiar form
+      setFormData({});
+    } catch (e: any) {
+      toast.error(`Error al persistir registro: ${e.message || e}`);
+    }
+  };
+
+  return (
+    <div className="space-y-6 py-4">
+      {isDirty && (
+        <div className="bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 rounded-xl p-3 text-[9px] uppercase tracking-widest font-black leading-relaxed flex items-center gap-2">
+          <Info size={14} className="shrink-0" />
+          <span>Advertencia: Tienes cambios locales sin guardar. El formulario usa la última versión guardada.</span>
+        </div>
+      )}
+
+      <div className="space-y-4">
+        {fields.length === 0 ? (
+          <div className="text-center py-8 text-xs text-muted-foreground font-semibold">
+            Este esquema no tiene campos definidos para capturar.
+          </div>
+        ) : (
+          fields.map((field) => {
+            const label = field.label || field.key;
+            const key = field.key;
+
+            return (
+              <div key={field.id} className="space-y-1.5 text-left">
+                <label className="text-[9px] font-black uppercase tracking-widest text-muted-foreground flex items-center gap-1">
+                  {label} {field.required && <span className="text-destructive">*</span>}
+                </label>
+
+                {field.type === 'boolean' ? (
+                  <div className="flex items-center gap-2 py-1.5">
+                    <input
+                      type="checkbox"
+                      id={`embed-${key}`}
+                      checked={!!formData[key]}
+                      onChange={(e) => handleInputChange(key, e.target.checked)}
+                      className="w-4 h-4 rounded border-muted/80 bg-muted/5 text-primary focus:ring-primary/20 accent-primary cursor-pointer"
+                    />
+                    <label htmlFor={`embed-${key}`} className="text-xs font-semibold text-foreground select-none cursor-pointer">
+                      Activo / Verdadero
+                    </label>
+                  </div>
+                ) : field.type === 'select' ? (
+                  <Select
+                    value={formData[key] || ''}
+                    onValueChange={(val) => handleInputChange(key, val)}
+                  >
+                    <SelectTrigger className="h-9 font-semibold text-xs bg-muted/5 border-muted/80 focus:ring-primary/20">
+                      <SelectValue placeholder="Seleccionar opción" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(field.options || field.config?.options || []).map((opt: any) => (
+                        <SelectItem key={opt.value} value={opt.value} className="font-semibold text-xs">
+                          {opt.label || opt.value}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                ) : field.type === 'textarea' ? (
+                  <Textarea
+                    value={formData[key] || ''}
+                    onChange={(e) => handleInputChange(key, e.target.value)}
+                    placeholder={field.placeholder || ''}
+                    className="font-semibold text-xs bg-muted/5 border-muted/80 min-h-20"
+                  />
+                ) : field.type === 'date' ? (
+                  <Input
+                    type="date"
+                    value={formData[key] || ''}
+                    onChange={(e) => handleInputChange(key, e.target.value)}
+                    className="font-semibold text-xs h-9 bg-muted/5 border-muted/80"
+                  />
+                ) : field.type === 'number' ? (
+                  <Input
+                    type="number"
+                    value={formData[key] || ''}
+                    onChange={(e) => handleInputChange(key, e.target.value)}
+                    placeholder={field.placeholder || ''}
+                    className="font-semibold text-xs h-9 bg-muted/5 border-muted/80"
+                  />
+                ) : field.type === 'object' || field.type === 'array_of_objects' ? (
+                  <div className="border border-dashed rounded-xl p-3 bg-muted/5 space-y-3">
+                    <p className="text-[8px] font-black uppercase tracking-widest text-primary/60">
+                      Estructura Interna ({field.type === 'object' ? 'Objeto' : 'Lista'})
+                    </p>
+                    {(field.fields || []).map((subField: any) => (
+                      <div key={subField.id} className="space-y-1">
+                        <label className="text-[8px] font-black uppercase tracking-widest text-muted-foreground">
+                          {subField.label || subField.key}
+                        </label>
+                        <Input
+                          value={formData[`${key}.${subField.key}`] || ''}
+                          onChange={(e) => handleInputChange(`${key}.${subField.key}`, e.target.value)}
+                          placeholder="Sub-valor..."
+                          className="font-semibold text-xs h-8 bg-background border-muted/80"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <Input
+                    type="text"
+                    value={formData[key] || ''}
+                    onChange={(e) => handleInputChange(key, e.target.value)}
+                    placeholder={field.placeholder || ''}
+                    className="font-semibold text-xs h-9 bg-muted/5 border-muted/80"
+                  />
+                )}
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      <div className="pt-4 border-t">
+        <Button
+          onClick={handleSave}
+          disabled={fields.length === 0}
+          className="w-full h-10 rounded-xl text-[10px] font-black uppercase tracking-widest gap-2 bg-primary hover:bg-primary/95 text-primary-foreground shadow-md"
+        >
+          <Sparkles size={12} /> Guardar Registro
+        </Button>
+      </div>
+    </div>
+  );
+}
+

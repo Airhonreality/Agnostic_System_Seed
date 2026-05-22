@@ -72,7 +72,7 @@ export async function GET(req: NextRequest) {
     // Supports context store hydration in a single atomic request
     if (namespace === 'all') {
       const fullData: Record<string, any[]> = {};
-      const coreContexts = [SYSTEM_NS.ROUTES, SYSTEM_NS.SCHEMAS, SYSTEM_NS.CONFIG];
+      const coreContexts = [SYSTEM_NS.ROUTES, SYSTEM_NS.SCHEMAS, SYSTEM_NS.CONFIG, SYSTEM_NS.USERS, SYSTEM_NS.USER_LISTS];
       const activeContexts: string[] = [...coreContexts];
 
       try {
@@ -140,6 +140,15 @@ export async function POST(req: NextRequest) {
       const id: string = body.id;
       if (!id) return NextResponse.json({ success: false, error: 'id required' }, { status: 400 });
       removeSchema.parse({ action: 'REMOVE', namespace, id });
+      // Guard: records marked is_permanent cannot be deleted
+      const existing = await strategy.read(namespace);
+      const target = Array.isArray(existing) ? existing.find((r: any) => r.id === id) : null;
+      if (target?.data?.is_permanent === true) {
+        return NextResponse.json(
+          { success: false, error: 'Este registro es permanente y no puede eliminarse.' },
+          { status: 403 }
+        );
+      }
       await strategy.remove(namespace, id);
       return NextResponse.json({ success: true });
     }

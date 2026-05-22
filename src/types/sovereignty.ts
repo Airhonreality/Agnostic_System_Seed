@@ -14,6 +14,8 @@
  * - NEVER: Usar tipos genéricos (any) para la configuración maestra del sistema.
  */
 
+export type { SchemaField, SchemaFieldConfig } from '@agnostic/core';
+
 export type StrategyType = 'LocalStrategy' | 'GitHubStrategy' | 'SupabaseStrategy';
 
 export interface UITokens {
@@ -60,3 +62,6 @@ export interface ScriptRecord {
     code: string;                          // JS puro: function run(record, api) {...}
   };
 }
+
+
+

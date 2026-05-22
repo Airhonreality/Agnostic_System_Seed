@@ -1,0 +1,9 @@
+ name: Agnostic MCP
+ version: 0.0.1
+ schema: v1
+ mcpServers:
+   - name: Agnostic MCP
+     type: stdio
+     command: ["npx", "tsx", "scripts/mcp-bridge.ts"]
+     args: []
+     env: {}

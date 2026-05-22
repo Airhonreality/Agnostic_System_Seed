@@ -8,6 +8,7 @@
       "label": "Estética y Proyección",
       "icon": "Palette",
       "type": "section",
+      "ns": false,
       "fields": [
         {
           "key": "label",
@@ -54,6 +55,7 @@
       "label": "Automatización",
       "icon": "Zap",
       "type": "section",
+      "ns": false,
       "fields": [
         {
           "key": "zap",

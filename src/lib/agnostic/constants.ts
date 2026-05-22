@@ -41,7 +41,47 @@ export const getModuleIcon = (type: string): LucideIcon => {
 };
 
 export const SYSTEM_NS = {
-  ROUTES:  'page_routes',
-  SCHEMAS: 'schema_definitions',
-  CONFIG:  'system_config',
+  ROUTES:     'page_routes',
+  SCHEMAS:    'schema_definitions',
+  CONFIG:     'system_config',
+  TOKENS:     'design_tokens',
+  USERS:      'users',
+  USER_LISTS: 'user_lists',
 } as const;
+
+export const FIELD_META_SCHEMA = {
+  name: 'field_config',
+  fields: [
+    {
+      key: 'width',
+      label: 'Ancho Visual',
+      type: 'select',
+      width: 'half',
+      options: [
+        { label: 'Completo (100%)', value: 'full' },
+        { label: 'Mitad (50%)', value: 'half' },
+        { label: 'Un Tercio (33%)', value: 'third' }
+      ]
+    },
+    {
+      key: 'placeholder',
+      label: 'Placeholder / Indicación',
+      type: 'text',
+      width: 'half',
+      placeholder: 'Ej. Escriba sin guiones...'
+    },
+    {
+      key: 'isPrimary',
+      label: '¿Es Identificador Primario? (Muestra en listas/búsquedas)',
+      type: 'boolean',
+      width: 'full'
+    },
+    {
+      key: 'readOnly',
+      label: '¿Es de Solo Lectura? (Calculado/Fijo)',
+      type: 'boolean',
+      width: 'full'
+    }
+  ]
+};
+

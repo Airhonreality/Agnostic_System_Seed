@@ -78,10 +78,14 @@ export default async function MasterRoute({ params }: PageProps) {
     />
   );
 
-  const requiredRole = (resolution.route?.data as any)?.requiredRole;
+  const routeData = (resolution.route?.data as any) ?? {};
+  const allowedLists: string[] = routeData.allowed_lists ?? [];
+  const requiredRole: string | null = routeData.requiredRole ?? null;
 
-  return requiredRole ? (
-    <AgnosticGuard requiredRole={requiredRole}>
+  const needsGuard = allowedLists.length > 0 || !!requiredRole;
+
+  return needsGuard ? (
+    <AgnosticGuard allowedLists={allowedLists} requiredRole={requiredRole}>
       {content}
     </AgnosticGuard>
   ) : content;

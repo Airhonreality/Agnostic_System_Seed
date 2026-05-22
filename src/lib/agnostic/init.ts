@@ -34,20 +34,14 @@ import { ProjectSelector } from '@/components/agnostic/blocks/ProjectSelector';
 // UI Presentation Blocks (ROADMAP_UI_BLOCKS.md)
 import { AgnosticNavbar } from '@/components/agnostic/blocks/AgnosticNavbar';
 import { AgnosticTabs } from '@/components/agnostic/blocks/AgnosticTabs';
-import { AgnosticText } from '@/components/agnostic/blocks/AgnosticText';
-import { AgnosticHero } from '@/components/agnostic/blocks/AgnosticHero';
 import { AgnosticColumns } from '@/components/agnostic/blocks/AgnosticColumns';
-import { AgnosticDivider } from '@/components/agnostic/blocks/AgnosticDivider';
-import { AgnosticCardStatic } from '@/components/agnostic/blocks/AgnosticCardStatic';
+import { AgnosticFrame } from '@/components/agnostic/blocks/AgnosticFrame';
+import frameSettingsSchema from '@/core/designer/dna/schemas/frame.settings.json';
 
 // Content Blocks (ROADMAP_CONTENT_BLOCKS.md)
 import { AgnosticMarkdown } from '@/components/agnostic/blocks/AgnosticMarkdown';
-import { AgnosticImage } from '@/components/agnostic/blocks/AgnosticImage';
-import { AgnosticStatsGrid } from '@/components/agnostic/blocks/AgnosticStatsGrid';
 import { AgnosticFaq } from '@/components/agnostic/blocks/AgnosticFaq';
-import { AgnosticTestimonial } from '@/components/agnostic/blocks/AgnosticTestimonial';
-import { AgnosticCtaBanner } from '@/components/agnostic/blocks/AgnosticCtaBanner';
-import { AgnosticSpacer } from '@/components/agnostic/blocks/AgnosticSpacer';
+import { AgnosticVisual } from '@/components/agnostic/blocks/AgnosticVisual';
 
 // Core settings schemas
 import actionSettingsSchema from '@/core/designer/dna/schemas/action.settings.json';
@@ -79,6 +73,18 @@ const AgnosticTableWrapper = (props: any) => {
   return React.createElement(AgnosticCollection, { ...props, view: 'table' });
 };
 
+const VISUAL_BLOCKS = [
+  { type: 'text',        name: 'Texto',            category: 'content', schema: textSettingsSchema },
+  { type: 'hero',        name: 'Hero',             category: 'content', schema: heroSettingsSchema },
+  { type: 'divider',     name: 'Divisor',          category: 'layout',  schema: dividerSettingsSchema },
+  { type: 'spacer',      name: 'Espacio',          category: 'layout',  schema: spacerSettingsSchema },
+  { type: 'card_static', name: 'Tarjeta Estática', category: 'content', schema: cardStaticSettingsSchema },
+  { type: 'stats_grid',  name: 'Métricas',         category: 'content', schema: statsGridSettingsSchema },
+  { type: 'testimonial', name: 'Testimonio',       category: 'content', schema: testimonialSettingsSchema },
+  { type: 'image',       name: 'Imagen',           category: 'content', schema: imageSettingsSchema },
+  { type: 'cta_banner',  name: 'CTA Banner',       category: 'content', schema: ctaBannerSettingsSchema },
+] as const;
+
 /**
  * Boots the static UI block components into the unified isomorphic registry.
  */
@@ -98,18 +104,16 @@ export function initializeRegistry() {
   // Register Layout & Presentation Projectors (UI Blocks)
   registry.register('navbar', AgnosticNavbar, { category: 'layout', name: 'Navbar', settings_schema: navbarSettingsSchema });
   registry.register('tabs', AgnosticTabs, { category: 'layout', name: 'Pestañas', settings_schema: tabsSettingsSchema });
+  // Register Frame layout component before columns to keep order logical
+  registry.register('frame', AgnosticFrame, { category: 'layout', name: 'Frame', settings_schema: frameSettingsSchema });
   registry.register('columns', AgnosticColumns, { category: 'layout', name: 'Columnas', settings_schema: columnsSettingsSchema });
-  registry.register('divider', AgnosticDivider, { category: 'layout', name: 'Divisor', settings_schema: dividerSettingsSchema });
-  registry.register('text', AgnosticText, { category: 'content', name: 'Texto', settings_schema: textSettingsSchema });
-  registry.register('hero', AgnosticHero, { category: 'content', name: 'Hero', settings_schema: heroSettingsSchema });
-  registry.register('card_static', AgnosticCardStatic, { category: 'content', name: 'Tarjeta Estática', settings_schema: cardStaticSettingsSchema });
 
-  // Register Content Projectors (Content Blocks)
+  // Register Consolidate Presentational Blocks via loop
+  for (const b of VISUAL_BLOCKS) {
+    registry.register(b.type, AgnosticVisual, { category: b.category, name: b.name, settings_schema: b.schema });
+  }
+
+  // Register Content Projectors (Content Blocks with logical complexity)
   registry.register('markdown', AgnosticMarkdown, { category: 'content', name: 'Markdown', settings_schema: markdownSettingsSchema });
-  registry.register('image', AgnosticImage, { category: 'content', name: 'Imagen', settings_schema: imageSettingsSchema });
-  registry.register('stats_grid', AgnosticStatsGrid, { category: 'content', name: 'Métricas', settings_schema: statsGridSettingsSchema });
   registry.register('faq', AgnosticFaq, { category: 'content', name: 'FAQ', settings_schema: faqSettingsSchema });
-  registry.register('testimonial', AgnosticTestimonial, { category: 'content', name: 'Testimonio', settings_schema: testimonialSettingsSchema });
-  registry.register('cta_banner', AgnosticCtaBanner, { category: 'content', name: 'CTA Banner', settings_schema: ctaBannerSettingsSchema });
-  registry.register('spacer', AgnosticSpacer, { category: 'layout', name: 'Espacio', settings_schema: spacerSettingsSchema });
 }

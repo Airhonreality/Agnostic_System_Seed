@@ -1,0 +1,10 @@
+# ... otras configuraciones de Continue.dev ...
+
+mcpServers:
+  - name: Agnostic MCP
+    command: ["node", "scripts/mcp-bridge.ts"]
+    args: [] # Eliminamos los args, ya que el script no los procesa.
+    # Eliminamos completamente la sección 'env' porque el mcp-bridge.ts,
+    # a través de getStrategy(), no necesita que estas variables se le inyecten
+    # externamente por Continue.dev para resolver su estrategia de persistencia.
+    # Asumimos que getStrategy() ya maneja esto internamente.

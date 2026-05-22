@@ -1,8 +1,10 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { useDNAStore, useMateriaStore, useSystemStore } from '@/lib/agnostic/store';
-import { DataItem } from '@agnostic/core';
+import { useMateriaStore, useSystemStore } from '@/lib/agnostic/store';
+import { SYSTEM_NS } from '@/lib/agnostic/constants';
+import { EmailPasswordStrategy } from '@/lib/agnostic/auth/EmailPasswordStrategy';
+import type { AuthStrategy } from '@/lib/agnostic/auth/AuthStrategy';
 
 interface User {
   id: string;
@@ -29,6 +31,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const { data } = useMateriaStore();
   const { setUser: syncUserToStore } = useSystemStore();
 
+  // Swappable auth strategy — replace with GoogleOAuthStrategy etc. without touching this file
+  const strategy: AuthStrategy = new EmailPasswordStrategy(
+    () => data?.[SYSTEM_NS.USERS] || []
+  );
+
   // Sync user identity to global system store
   useEffect(() => {
     syncUserToStore(user);
@@ -48,23 +55,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const login = useCallback(async (email: string, pass: string): Promise<boolean> => {
-    const users = data?.['users'] || [];
-    const found = users.find(u => u.data.email === email && u.data.password === pass);
-
-    if (found) {
-      const userData: User = {
-        id: found.id,
-        email: found.data.email as string,
-        name: found.data.name as string,
-        role: found.data.role as string,
-        metadata: found.data.metadata as Record<string, any>
-      };
-      setUserState(userData);
-      localStorage.setItem('agnostic_session', JSON.stringify(userData));
-      return true;
-    }
-    return false;
-  }, [data]);
+    const authUser = await strategy.authenticate({ email, password: pass });
+    if (!authUser) return false;
+    setUserState(authUser as User);
+    localStorage.setItem('agnostic_session', JSON.stringify(authUser));
+    return true;
+  }, [strategy]);
 
   const logout = useCallback(() => {
     setUserState(null);

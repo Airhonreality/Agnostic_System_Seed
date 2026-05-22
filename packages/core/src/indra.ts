@@ -125,3 +125,30 @@ export interface SystemPassport {
   github_branch?: string;  // 'main' - NO es un secreto
 }
 
+// ─── DNA SCHEMAS ─────────────────────────────────────────────────────────────
+
+export interface SchemaFieldConfig {
+  relation?: {
+    entity: string;
+    parent_key: string;
+    display_field?: string;
+  };
+  options?: Array<{ label: string; value: string }>;
+  isPrimary?: boolean;
+}
+
+export interface SchemaField {
+  id: string;
+  key: string;
+  label: string;
+  type: 'text' | 'number' | 'select' | 'date' | 'boolean' | 'textarea' | 'relation' | 'object' | 'array_of_objects';
+  width?: 'full' | 'half' | 'third';
+  section?: string;
+  required?: boolean;
+  readOnly?: boolean;
+  isPrimary?: boolean;
+  placeholder?: string;
+  config?: SchemaFieldConfig;
+  fields?: SchemaField[];  // recursivo para type 'object' o 'array_of_objects'
+}
+

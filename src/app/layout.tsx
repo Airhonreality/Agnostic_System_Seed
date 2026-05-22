@@ -19,6 +19,7 @@ import { AppProvider }    from "@/context/AppContext";
 import { AuthProvider }   from "@/context/AuthContext";
 import { Toaster }        from "sonner";
 import { SovereigntyOrchestrator } from "@/components/agnostic/engine/SovereigntyOrchestrator";
+import { AdminGear }               from "@/components/agnostic/admin/AdminGear";
 import { getVaultData }   from "@/core/server/vault";
 import { getSiloPath }    from "@/server/activeProject";
 import fs   from "fs/promises";
@@ -34,7 +35,7 @@ export default async function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   const siloPath     = getSiloPath();
-  const vaultData    = await getVaultData([SYSTEM_NS.ROUTES, SYSTEM_NS.SCHEMAS, SYSTEM_NS.CONFIG]);
+  const vaultData    = await getVaultData([SYSTEM_NS.ROUTES, SYSTEM_NS.SCHEMAS, SYSTEM_NS.CONFIG, SYSTEM_NS.TOKENS]);
 
   // ── CAPA 1: Tokens CSS (inyectado inline — sin latencia de red) ──────────
   // El satélite overridea variables --sat-* en tokens.css.
@@ -86,6 +87,7 @@ export default async function RootLayout({
           <AuthProvider>
             {children}
             <SovereigntyOrchestrator />
+            <AdminGear />
             <Toaster position="bottom-left" expand={false} richColors />
           </AuthProvider>
         </AppProvider>

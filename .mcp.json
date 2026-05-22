@@ -1,10 +1,1 @@
-{
-  "mcpServers": {
-    "agnostic": {
-      "command": "cmd",
-      "args": ["/c", "npx", "tsx", "scripts/mcp-bridge.ts"],
-      "cwd": "c:\\Users\\javir\\Documents\\DEVs\\agnostic system",
-      "description": "Agnostic System — Schema, Route and Record management"
-    }
-  }
-}
+{}

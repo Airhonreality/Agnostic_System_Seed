@@ -1,0 +1,12 @@
+name: Agnostic System (Workspace)
+version: 0.0.1
+schema: v1
+mcpServers:
+  - name: Agnostic MCP
+    # Es importante especificar el tipo 'stdio' ya que tu mcp-bridge.ts
+    # se comunica a través de la entrada y salida estándar.
+    type: stdio 
+    command: ["node", "scripts/mcp-bridge.ts"]
+
+    args: [] 
+    env: {} # Mantenemos esto si no necesitas inyectar variables de entorno aquí.

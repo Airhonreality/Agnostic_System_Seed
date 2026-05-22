@@ -8,6 +8,7 @@
       "label": "Dimensión y Canvas",
       "icon": "Layout",
       "type": "section",
+      "ns": false,
       "fields": [
         {
           "key": "direction",
@@ -61,6 +62,7 @@
       "label": "Comportamiento",
       "icon": "Activity",
       "type": "section",
+      "ns": false,
       "fields": [
         {
           "key": "isCollapsible",
@@ -95,18 +97,21 @@
       "label": "Estética y Proyección",
       "icon": "Palette",
       "type": "section",
+      "ns": false,
       "fields": [
         {
           "key": "switches",
           "label": "Campos Visibles (Whitelist)",
-          "type": "string",
-          "description": "Lista de campos separados por coma (ej: name, price) a proyectar. Si está vacío, se muestran todos."
+          "type": "multi-select",
+          "options_source": "dna_fields",
+          "description": "Campos del DNA a proyectar. Vacío = todos."
         },
         {
           "key": "blackout",
           "label": "Campos Ocultos (Blacklist)",
-          "type": "string",
-          "description": "Lista de campos separados por coma a ocultar (ej: id, internal_code)."
+          "type": "multi-select",
+          "options_source": "dna_fields",
+          "description": "Campos del DNA a ocultar de la proyección."
         }
       ]
     },
@@ -115,6 +120,7 @@
       "label": "Automatización",
       "icon": "Zap",
       "type": "section",
+      "ns": false,
       "fields": [
         {
           "key": "zap",
@@ -130,6 +136,7 @@
       "label": "Arquitectura de Datos",
       "icon": "Database",
       "type": "section",
+      "ns": false,
       "fields": [
         {
           "key": "parent_key",

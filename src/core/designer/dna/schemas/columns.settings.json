@@ -7,25 +7,23 @@
       "label": "Configuración de Columnas",
       "icon": "Layout",
       "type": "section",
+      "ns": false,
       "fields": [
         {
           "key": "cols",
           "label": "Número de Columnas",
-          "type": "select",
-          "options": [
-            { "label": "1 columna",  "value": "1" },
-            { "label": "2 columnas", "value": "2" },
-            { "label": "3 columnas", "value": "3" },
-            { "label": "4 columnas", "value": "4" }
-          ],
-          "default": "2"
+          "type": "slider",
+          "min": 1,
+          "max": 4,
+          "default": 2
         },
         {
           "key": "gap",
-          "label": "Separación (unidades Tailwind)",
-          "type": "string",
-          "description": "Número 1-16. Ejemplo: 6 = 1.5rem de separación.",
-          "default": "6"
+          "label": "Separación (unidades)",
+          "type": "slider",
+          "min": 1,
+          "max": 16,
+          "default": 6
         }
       ]
     }

@@ -27,7 +27,7 @@ import { Trash2, Plus, ChevronDown, ChevronRight, Settings2, Sparkles } from 'lu
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useTranslation } from '@/core/i18n/useTranslation';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from '@/components/ui/select';
 import { cn } from '@/lib/utils';
 import { AgnosticLogicEngine } from '@/lib/agnostic/AgnosticLogicEngine';
 import { AgnosticConfigProjector } from '@/components/agnostic/modules/AgnosticConfigProjector';
@@ -44,32 +44,46 @@ import {
 interface RecursiveBlockComposerProps {
   block: any;
   schemas: any[];
+  tokens?: any[];
   onUpdate: (patch: any) => void;
   onRemove: () => void;
   depth?: number;
   parentContext?: string; // 🛰️ Context of the parent block for inference
+  hideChildren?: boolean;
 }
 
 export function RecursiveBlockComposer({ 
   block, 
   schemas, 
+  tokens = [],
   onUpdate, 
   onRemove, 
   depth = 0,
-  parentContext
+  parentContext,
+  hideChildren = false
 }: RecursiveBlockComposerProps) {
   const [isExpanded, setIsExpanded] = React.useState(true);
+  const [isConfigOpen, setIsConfigOpen] = React.useState(false);
   
-  const availableBlocks = React.useMemo(() => {
-    return registry.getRegisteredTypes().map(type => {
-      const meta = registry.getMetadata(type);
-      return {
-        value: type,
-        label: meta?.name || type,
-        category: meta?.category || 'core'
-      };
-    });
-  }, []);
+// Categorized block options (E1 Fix)
+const BLOCK_CATEGORIES = [
+  { label: 'Layout / Contenedores', items: [{ value: 'frame', label: 'Frame (Contenedor)' }] },
+  { label: 'Contenido Visual', items: [
+    { value: 'text', label: 'Texto' }, { value: 'image', label: 'Imagen' },
+    { value: 'card_static', label: 'Tarjeta Estática' }, { value: 'stats_grid', label: 'Métricas' },
+    { value: 'testimonial', label: 'Testimonio' }, { value: 'cta_banner', label: 'CTA Banner' },    
+    { value: 'divider', label: 'Divisor' }, { value: 'spacer', label: 'Espacio' },
+  ]},
+  { label: 'Datos del DNA', items: [
+    { value: 'form', label: 'Formulario' }, { value: 'table', label: 'Tabla' },
+    { value: 'collection', label: 'Colección' }, { value: 'action', label: 'Acción' },
+  ]},
+];
+
+// Flat representation for internal registries mapping
+const staticBlockOptions = BLOCK_CATEGORIES.flatMap(cat => cat.items);
+
+
 
   const updateBlock = (patch: any) => onUpdate(patch);
 
@@ -124,8 +138,19 @@ export function RecursiveBlockComposer({
     }));
   }, [block.schema_id, schemas]);
 
+  const canonicalSchemaId = React.useMemo(() => {
+    if (!block.schema_id) return '';
+    const match = schemas.find(
+      (s: any) =>
+        s.id === block.schema_id ||
+        s.data?.slug === block.schema_id ||
+        s.data?.name === block.schema_id
+    );
+    return match?.id || block.schema_id;
+  }, [block.schema_id, schemas]);
+
   const configResolvers = {
-    block_registry: availableBlocks.map((b: any) => ({ label: b.label, value: b.value })),
+    block_registry: staticBlockOptions.map((b: any) => ({ label: b.label, value: b.value })),
     dna_registry: schemas.map(s => ({ label: s.data?.name || s.id, value: s.id })),
     logic_engine_registry: AgnosticLogicEngine.getRegisteredFunctions(),
     style_registry: ['system', 'brand', 'luxury', 'info'],
@@ -133,7 +158,7 @@ export function RecursiveBlockComposer({
     dna_fields: dnaFields
   };
 
-  const [isConfigOpen, setIsConfigOpen] = useState(false);
+
 
   return (
     <div className={cn(
@@ -154,21 +179,28 @@ export function RecursiveBlockComposer({
               <SelectValue placeholder="Tipo..." />
             </SelectTrigger>
             <SelectContent>
-              {availableBlocks.map((b) => (
-                <SelectItem key={b.value} value={b.value} className="text-xs font-bold uppercase">
-                  {b.label}
-                </SelectItem>
+              {BLOCK_CATEGORIES.map((cat, idx) => (
+                <SelectGroup key={idx}>
+                  <SelectLabel className="text-[9px] font-black uppercase tracking-wider text-muted-foreground/60 px-2 py-1.5">
+                    {cat.label}
+                  </SelectLabel>
+                  {cat.items.map((item) => (
+                    <SelectItem key={item.value} value={item.value} className="text-xs font-semibold pl-4">
+                      {item.label}
+                    </SelectItem>
+                  ))}
+                </SelectGroup>
               ))}
             </SelectContent>
           </Select>
         </div>
 
-        {/* Input de Título del Bloque */}
+        {/* Input de Título del Bloque — escribe en block.config.label (fuente única) */}
         <div className="flex-1 min-w-0">
-          <Input 
-            value={block.title || block.data?.title || ''} 
-            onChange={(e) => updateBlock({ title: e.target.value })} 
-            placeholder="Título o Etiqueta del Bloque..."
+          <Input
+            value={block.config?.label ?? block.title ?? ''}
+            onChange={(e) => onUpdate({ config: { ...(block.config || {}), label: e.target.value } })}
+            placeholder="Etiqueta del bloque..."
             className="font-bold text-xs h-9 border-none bg-transparent hover:bg-muted/30 focus-visible:ring-1 focus-visible:ring-primary/20 px-2 rounded-lg"
           />
         </div>
@@ -178,7 +210,7 @@ export function RecursiveBlockComposer({
           <div className="w-56 shrink-0 flex items-center gap-2 animate-in fade-in duration-200">
             <span className="text-[9px] font-black uppercase text-muted-foreground/60 tracking-wider">DNA:</span>
             <Select 
-              value={block.schema_id || ''} 
+              value={canonicalSchemaId || undefined} 
               onValueChange={(val) => updateBlock({ schema_id: val })}
             >
               <SelectTrigger className="h-8 text-xs font-semibold bg-muted/10 border-muted/50 focus:ring-0">
@@ -235,57 +267,55 @@ export function RecursiveBlockComposer({
 
           {/* Formulario de Configuración Proyectado Verticalmente */}
           <div className="space-y-4">
-            <AgnosticConfigProjector 
-              schema={registry.getMetadata(block.type)?.settings_schema || blockSettingsSchema} 
-              data={block} 
-              onUpdate={(patch) => updateBlock({ ...patch })}
+            <AgnosticConfigProjector
+              schema={registry.getMetadata(block.type)?.settings_schema || blockSettingsSchema}
+              data={block.config || {}}
+              onUpdate={(patch) => onUpdate({ config: { ...(block.config || {}), ...patch } })}
               resolvers={configResolvers}
+              tokens={tokens}
             />
           </div>
         </SheetContent>
       </Sheet>
 
       {/* 🌲 RECURSIVIDAD Y SUB-BLOQUES */}
-      <div className="mt-4 pl-4 border-l border-muted/30">
-        <div className="flex items-center justify-between mb-4">
-          <Button 
-            variant="ghost" 
-            size="sm" 
-            onClick={() => setIsExpanded(!isExpanded)}
-            className="text-[9px] font-black uppercase tracking-[0.2em] hover:bg-transparent px-0 text-muted-foreground/40 hover:text-muted-foreground"
-          >
-            {isExpanded ? <ChevronDown size={14} className="mr-2 text-primary/30" /> : <ChevronRight size={14} className="mr-2 text-primary/30" />}
-            Sub-Bloques ({block.blocks?.length || 0})
-          </Button>
-          
-          <Button 
-            onClick={() => updateBlock({ blocks: [...(block.blocks || []), { id: crypto.randomUUID(), type: 'form', title: 'Nuevo Sub-Bloque' }] })}
-            variant="outline" 
-            size="sm" 
-            className="h-8 rounded-xl border-dashed border-primary/20 text-[9px] font-black tracking-widest gap-2 px-3 hover:bg-primary/5 transition-all"
-          >
-            <Plus size={12} /> AÑADIR SUB-BLOQUE
-          </Button>
-        </div>
+      {block.type === 'frame' && (
+        <div className="mt-4 pl-4 border-l border-muted/30">
+          <div className="flex items-center justify-between mb-4">
+            <div className="text-[9px] font-black uppercase tracking-[0.2em] text-muted-foreground/40">
+              Hijos del Contenedor ({block.blocks?.length || 0})
+            </div>
+            
+            <Button 
+              onClick={() => updateBlock({ blocks: [...(block.blocks || []), { id: crypto.randomUUID(), type: 'frame', title: 'Nuevo Frame', direction: 'vertical', blocks: [] }] })}
+              variant="outline" 
+              size="sm" 
+              className="h-8 rounded-xl border-dashed border-primary/20 text-[9px] font-black tracking-widest gap-2 px-3 hover:bg-primary/5 transition-all"
+            >
+              <Plus size={12} /> AÑADIR HIJO AL FRAME
+            </Button>
+          </div>
 
-        {isExpanded && block.blocks?.map((subBlock: any, subIdx: number) => (
-          <RecursiveBlockComposer
-            key={subBlock.id || subIdx}
-            block={subBlock}
-            schemas={schemas}
-            depth={depth + 1}
-            parentContext={block.context}
-            onUpdate={(patch) => {
-              const newBlocks = [...(block.blocks || [])];
-              newBlocks[subIdx] = { ...newBlocks[subIdx], ...patch };
-              updateBlock({ blocks: newBlocks });
-            }}
-            onRemove={() => {
-              updateBlock({ blocks: (block.blocks || []).filter((_: any, i: number) => i !== subIdx) });
-            }}
-          />
-        ))}
-      </div>
+          {!hideChildren && isExpanded && block.blocks?.map((subBlock: any, subIdx: number) => (
+            <RecursiveBlockComposer
+              key={subBlock.id || subIdx}
+              block={subBlock}
+              schemas={schemas}
+              tokens={tokens}
+              depth={depth + 1}
+              parentContext={block.context}
+              onUpdate={(patch) => {
+                const newBlocks = [...(block.blocks || [])];
+                newBlocks[subIdx] = { ...newBlocks[subIdx], ...patch };
+                updateBlock({ blocks: newBlocks });
+              }}
+              onRemove={() => {
+                updateBlock({ blocks: (block.blocks || []).filter((_: any, i: number) => i !== subIdx) });
+              }}
+            />
+          ))}
+        </div>
+      )}
 
     </div>
   );

@@ -63,11 +63,18 @@ Request → layout.tsx → getVaultData()
 
 ## MCP Bridge
 
-Semantic AI interface — 17 intent-driven tools:
+Semantic AI interface — stdio MCP server with intent-driven tools:
 
 ```bash
 npm run mcp:bridge    # stdio JSON-RPC server (registered in .mcp.json)
 ```
+
+Local CLI connection:
+
+1. Run the bridge from the repo root with `npm run mcp:bridge`.
+2. Configure your MCP client to launch the same command: `npm exec -- tsx scripts/mcp-bridge.ts`.
+3. If your client supports a project MCP descriptor, point it at [.mcp.json](.mcp.json).
+4. Use `npm run mcp:smoke` to verify the server answers `initialize` and `tools/list` before connecting a client.
 
 ## Storage Strategies
 

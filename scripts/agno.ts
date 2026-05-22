@@ -17,6 +17,7 @@
 import { getStrategy } from '../src/server/getStrategy';
 import readline from 'readline';
 import crypto from 'crypto';
+import fs from 'fs/promises';
 
 const adapter = getStrategy();
 
@@ -79,6 +80,12 @@ async function cmdSchema(name: string) {
   console.log(`${belt('ESTRUCTURA', name)} ${fields.join('  ')}`);
 }
 
+async function cmdSchemaId(name: string) {
+  const s = await findSchema(name);
+  if (!s) { console.log(`[ERROR] schema no encontrado: ${name}`); return; }
+  console.log(`${belt('ESTRUCTURA', name)} id: ${s.id}`);
+}
+
 async function cmdRoute(path: string) {
   const r = await findRoute(path);
   if (!r) { console.log(`[ERROR] ruta no encontrada: ${path}`); return; }
@@ -134,6 +141,31 @@ async function cmdScript(name: string) {
   if (!s) { console.log(`[ERROR] script no encontrado: ${name}`); return; }
   console.log(`${belt('SCRIPTS', name)}`);
   console.log(s.data.code);
+}
+
+async function cmdScriptExport(args: string[]) {
+  const name = args[0];
+  const fileIdx = args.indexOf('--file');
+  const filePath = fileIdx !== -1 ? args[fileIdx + 1] : undefined;
+  if (!name || !filePath) { console.log('[ERROR] uso: script export <name> --file <ruta.js>'); return; }
+  const scripts = (await adapter.read('scripts')) as any[];
+  const s = scripts.find((x: any) => x.data?.name === name);
+  if (!s) { console.log(`[ERROR] script no encontrado: ${name}`); return; }
+  await fs.writeFile(filePath, s.data.code, 'utf-8');
+  console.log(`${belt('SCRIPTS', name)} exportado → ${filePath} (${s.data.code.length} chars)`);
+}
+
+async function cmdScriptWrite(args: string[]) {
+  const name = args[0];
+  const fileIdx = args.indexOf('--file');
+  const filePath = fileIdx !== -1 ? args[fileIdx + 1] : undefined;
+  if (!name || !filePath) { console.log('[ERROR] uso: script write <name> --file <ruta.js>'); return; }
+  const code = await fs.readFile(filePath, 'utf-8');
+  const scripts = (await adapter.read('scripts')) as any[];
+  const existing = scripts.find((x: any) => x.data?.name === name);
+  const record = { id: existing?.id ?? crypto.randomUUID(), data: { name, code } };
+  await adapter.write('scripts', record);
+  console.log(`${belt('SCRIPTS', name)} guardado (${code.length} chars desde ${filePath})`);
 }
 
 // ── MUTACIONES (con cola de revisión) ────────────────────────────────────────
@@ -212,11 +244,16 @@ async function dispatch(line: string) {
 
   switch (cmd) {
     case 'ls':       return cmdLs();
-    case 'schema':   return cmdSchema(args[0]);
+    case 'schema':
+      if (args[0] === 'id') return cmdSchemaId(args[1]);
+      return cmdSchema(args[0]);
     case 'route':    return cmdRoute(args[0]);
     case 'ui':       return cmdUi(args[0]);
     case 'records':  return cmdRecords(args);
-    case 'script':   return cmdScript(args[0]);
+    case 'script':
+      if (args[0] === 'write')  return cmdScriptWrite(args.slice(1));
+      if (args[0] === 'export') return cmdScriptExport(args.slice(1));
+      return cmdScript(args[0]);
     case 'set':      return cmdSet(args);
     case 'commit':   return cmdCommit(args[0] === '--force');
     case 'drop':     return cmdDrop();

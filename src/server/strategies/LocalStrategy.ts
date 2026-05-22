@@ -92,7 +92,7 @@ export class LocalStrategy implements AgnosticBridge {
 
       const filePath = this.getFilePath(namespace);
       try {
-        const raw = await fs.readFile(filePath, 'utf-8');
+        const raw = (await fs.readFile(filePath, 'utf-8')).replace(/^﻿/, '');
         const items = this.sanitizeData(namespace, JSON.parse(raw));
         
         if (query?.where) {

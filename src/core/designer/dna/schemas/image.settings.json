@@ -7,6 +7,7 @@
       "label": "Imagen",
       "icon": "Palette",
       "type": "section",
+      "ns": false,
       "fields": [
         { "key": "src",     "label": "URL de la Imagen",  "type": "string",
           "description": "URL absoluta o path relativo. Ejemplo: /images/hero.jpg o https://cdn.ejemplo.com/img.webp" },
@@ -35,7 +36,7 @@
           ],
           "default": "cover"
         },
-        { "key": "rounded", "label": "Bordes Redondeados", "type": "boolean" }
+        { "key": "rounded", "label": "Bordes Redondeados", "type": "switch" }
       ]
     }
   ]

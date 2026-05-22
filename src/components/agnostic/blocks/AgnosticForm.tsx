@@ -54,6 +54,7 @@ import {
 // import { useAppDispatch } from '@/context/AppContext'; // 🚫 ELIMINADO PARA ROMPER BUCLE CIRCULAR
 
 import { useRelationData } from '@/lib/agnostic/hooks/useRelationData';
+import { SmartImageInput } from '@/components/ui/SmartImageInput';
 import { registerForm } from '@/lib/agnostic/formRegistry';
 
 interface AgnosticFormProps {
@@ -513,6 +514,12 @@ export function AgnosticForm({
                     "rounded-md border-border/30 bg-secondary/5 min-h-[80px] py-2 font-bold text-xs focus:ring-0 focus:border-primary/40 resize-none px-3",
                     isDerived && "cursor-default opacity-80"
                   )}
+                />
+              ) : field.type === 'image' ? (
+                <SmartImageInput
+                  value={formData[field.key] || ''}
+                  onChange={(url) => handleFieldChange(field.key, url)}
+                  placeholder={field.placeholder}
                 />
               ) : field.type === 'info' ? (
                 <div className="p-4 rounded-xl border border-primary/10 bg-primary/[0.03] space-y-2">

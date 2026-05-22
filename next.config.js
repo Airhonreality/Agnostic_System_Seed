@@ -7,7 +7,14 @@ const nextConfig = {
   eslint: {
     ignoreDuringBuilds: true,
   },
-  transpilePackages: ['@agnostic/core']
+  transpilePackages: ['@agnostic/core'],
+  webpack(config, { isServer, nextRuntime }) {
+    // Avoid eval-based devtool for edge runtime (middleware) — use plain source-map
+    if (nextRuntime === 'edge') {
+      config.devtool = 'source-map';
+    }
+    return config;
+  }
 };
 
 module.exports = nextConfig;

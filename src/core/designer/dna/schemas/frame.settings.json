@@ -1,0 +1,100 @@
+{
+  "id": "frame_settings_def",
+  "name": "frame_settings",
+  "fields": [
+    {
+      "key": "visual",
+      "label": "Frame",
+      "icon": "Frame",
+      "type": "section",
+      "ns": false,
+      "fields": [
+
+        { "key": "_g_autolayout", "type": "divider", "label": "Auto layout" },
+
+        {
+          "key": "direction",
+          "label": "Flujo",
+          "type": "toggle_group",
+          "options": [
+            { "value": "vertical",   "icon": "IconFlowColumn", "label": "Columna" },
+            { "value": "horizontal", "icon": "IconFlowRow",    "label": "Fila" },
+            { "value": "wrap",       "icon": "IconFlowWrap",   "label": "Ajuste" }
+          ]
+        },
+        {
+          "key": "sizing",
+          "label": "Ancho",
+          "type": "toggle_group",
+          "options": [
+            { "value": "fill", "icon": "IconSizeFill", "label": "Llenar" },
+            { "value": "hug",  "icon": "IconSizeHug",  "label": "Ajustar" }
+          ]
+        },
+        {
+          "key": "min_height",
+          "label": "Altura mínima",
+          "type": "number",
+          "placeholder": "0",
+          "step": 0.25
+        },
+        {
+          "key": "_anchor",
+          "label": "Alineación",
+          "type": "anchor_grid",
+          "key_y": "align_items",
+          "key_x": "justify",
+          "gap_key": "gap",
+          "values_y": ["start", "center", "end"],
+          "values_x": ["start", "center", "end", "space-between"]
+        },
+
+        { "key": "_g_pad", "type": "divider", "label": "Padding" },
+
+        {
+          "key": "padding",
+          "label": "Padding",
+          "type": "padding_group",
+          "keys": ["padding_top", "padding_right", "padding_bottom", "padding_left"]
+        },
+        {
+          "key": "clip",
+          "label": "Recortar contenido desbordado",
+          "type": "boolean"
+        },
+
+        { "key": "_g_app", "type": "divider", "label": "Apariencia" },
+
+        {
+          "key": "fill",
+          "label": "Fondo",
+          "type": "fill_group",
+          "keys": {
+            "type":     "fill_type",
+            "color":    "fill_color",
+            "src":      "fill_src",
+            "fit":      "fill_fit",
+            "position": "fill_position",
+            "gradient": "fill_gradient",
+            "opacity":  "fill_opacity"
+          }
+        },
+        {
+          "key": "border_radius",
+          "label": "Radio de borde",
+          "type": "number",
+          "placeholder": "0",
+          "step": 0.125,
+          "token_category": "radius"
+        },
+        {
+          "key": "text_color",
+          "label": "Color de texto",
+          "type": "text",
+          "placeholder": "0 0% 10%",
+          "token_category": "color"
+        }
+      ]
+    }
+  ]
+}

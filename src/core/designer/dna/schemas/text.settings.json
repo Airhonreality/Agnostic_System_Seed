@@ -7,6 +7,7 @@
       "label": "Contenido y Estilo",
       "icon": "Palette",
       "type": "section",
+      "ns": false,
       "fields": [
         {
           "key": "content",
@@ -32,12 +33,7 @@
         {
           "key": "align",
           "label": "Alineación",
-          "type": "select",
-          "options": [
-            { "label": "Izquierda", "value": "left" },
-            { "label": "Centro",   "value": "center" },
-            { "label": "Derecha",  "value": "right" }
-          ],
+          "type": "align",
           "default": "left"
         }
       ]

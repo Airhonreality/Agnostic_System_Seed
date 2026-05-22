@@ -24,7 +24,15 @@
  * - DOWNSTREAM: [vault/route.ts, vault.ts]
  */
 
-import 'server-only';
+if (typeof window !== 'undefined') {
+  throw new Error('getStrategy can only be used on the server.');
+}
+
+if (process.env.NEXT_RUNTIME) {
+  // Enforce server-only semantics in Next runtimes without breaking CLI usage.
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  require('server-only');
+}
 import { AgnosticBridge } from '@agnostic/core';
 import { LocalStrategy } from './strategies/LocalStrategy';
 import { SupabaseStrategy } from './strategies/SupabaseStrategy';
@@ -74,4 +82,3 @@ export function getStrategy(tenantKey?: string): AgnosticBridge {
   // 'LocalStrategy' or legacy 'local' - both default to LocalStrategy
   return new LocalStrategy(getSiloPath(passport.project_identity));
 }
-

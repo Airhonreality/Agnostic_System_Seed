@@ -26,6 +26,9 @@ process.env.SUPABASE_URL = process.env.SUPABASE_URL || '';
 process.env.SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
 const adapter = getStrategy();
+const MCP_PROTOCOL_VERSION = '2024-11-05';
+const MCP_SERVER_NAME = 'agnostic-system-seed';
+const MCP_SERVER_VERSION = '2.0.0';
 
 const tools = [
   // LAYER 0 — DISCOVERY
@@ -358,6 +361,14 @@ function respond(id: any, result: any) {
   };
 }
 
+function respondSuccess(id: any, result: any) {
+  return {
+    jsonrpc: '2.0',
+    id,
+    result
+  };
+}
+
 function respondError(id: any, message: string) {
   return { 
     jsonrpc: "2.0", 
@@ -369,11 +380,37 @@ function respondError(id: any, message: string) {
   };
 }
 
+function writeMcpMessage(message: any) {
+  const payload = JSON.stringify(message);
+  process.stdout.write(`Content-Length: ${Buffer.byteLength(payload, 'utf8')}\r\n\r\n${payload}`);
+}
+
 async function handleRequest(request: any) {
   const { method, params, id } = request;
 
+  if (method === 'initialize') {
+    return respondSuccess(id, {
+      protocolVersion: MCP_PROTOCOL_VERSION,
+      capabilities: {
+        tools: {}
+      },
+      serverInfo: {
+        name: MCP_SERVER_NAME,
+        version: MCP_SERVER_VERSION
+      }
+    });
+  }
+
+  if (method === 'notifications/initialized') {
+    return null;
+  }
+
+  if (method === 'ping') {
+    return respondSuccess(id, {});
+  }
+
   if (method === "tools/list") {
-    return { jsonrpc: "2.0", id, result: { tools } };
+    return respondSuccess(id, { tools });
   }
 
   if (method === "tools/call") {
@@ -831,14 +868,60 @@ async function handleRequest(request: any) {
 }
 
 // ─── STDIO LOOP ──────────────────────────────────────────────────────────────
+let stdinBuffer = Buffer.alloc(0);
+
+function parseMessages(buffer: Buffer) {
+  const messages: any[] = [];
+  let offset = 0;
+
+  while (offset < buffer.length) {
+    const headerEnd = buffer.indexOf('\r\n\r\n', offset, 'utf8');
+    if (headerEnd === -1) break;
+
+    const headerText = buffer.slice(offset, headerEnd).toString('utf8');
+    const contentLengthMatch = headerText.match(/Content-Length:\s*(\d+)/i);
+    if (!contentLengthMatch) {
+      offset = headerEnd + 4;
+      continue;
+    }
+
+    const contentLength = Number(contentLengthMatch[1]);
+    const bodyStart = headerEnd + 4;
+    const bodyEnd = bodyStart + contentLength;
+    if (buffer.length < bodyEnd) break;
+
+    const body = buffer.slice(bodyStart, bodyEnd).toString('utf8');
+    messages.push(JSON.parse(body));
+    offset = bodyEnd;
+
+    while (offset < buffer.length && (buffer[offset] === 0x0d || buffer[offset] === 0x0a || buffer[offset] === 0x20)) {
+      offset++;
+    }
+  }
+
+  return { messages, remainder: buffer.slice(offset) };
+}
+
 process.stdin.on('data', async (data) => {
-  const lines = data.toString().split('\n');
-  for (const line of lines) {
-    if (!line.trim()) continue;
+  stdinBuffer = Buffer.concat([stdinBuffer, data]);
+  const { messages, remainder } = parseMessages(stdinBuffer);
+  stdinBuffer = remainder;
+
+  for (const request of messages) {
     try {
-      const request = JSON.parse(line);
       const response = await handleRequest(request);
-      process.stdout.write(JSON.stringify(response) + '\n');
-    } catch (e) {}
+      if (response) writeMcpMessage(response);
+    } catch (error: any) {
+      if (request?.id !== undefined) {
+        writeMcpMessage({
+          jsonrpc: '2.0',
+          id: request.id,
+          error: {
+            code: -32603,
+            message: error?.message || 'Internal error'
+          }
+        });
+      }
+    }
   }
 });

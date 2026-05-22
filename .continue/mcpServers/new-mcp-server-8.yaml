@@ -1,0 +1,9 @@
+name: agnostic
+version: 0.0.1
+schema: v1
+mcpServers:
+  - name: agnostic
+    command: C:/Users/javir/Documents/DEVs/agnostic system/node_modules/.bin/tsx.cmd
+    args:
+      - C:/Users/javir/Documents/DEVs/agnostic system/scripts/mcp-bridge.ts
+    env: {}

@@ -8,6 +8,7 @@
       "label": "Comportamiento",
       "icon": "Activity",
       "type": "section",
+      "ns": false,
       "fields": [
         {
           "key": "intent",
@@ -47,18 +48,21 @@
       "label": "Estética y Proyección",
       "icon": "Palette",
       "type": "section",
+      "ns": false,
       "fields": [
         {
           "key": "switches",
           "label": "Campos Visibles en Tabla/Colección (Whitelist)",
-          "type": "string",
-          "description": "Controla qué columnas se proyectan en AgnosticTable y AgnosticGroupedCard. Separados por coma. DISTINTO de visible_fields: este afecta proyección de tabla, no el formulario."
+          "type": "multi-select",
+          "options_source": "dna_fields",
+          "description": "Columnas a proyectar en AgnosticTable y AgnosticGroupedCard. Vacío = todas."
         },
         {
           "key": "blackout",
           "label": "Campos Ocultos en Tabla/Colección (Blacklist)",
-          "type": "string",
-          "description": "Campos del esquema a ocultar en la proyección de tabla. Separados por coma."
+          "type": "multi-select",
+          "options_source": "dna_fields",
+          "description": "Campos del esquema a ocultar de la proyección de tabla."
         }
       ]
     },
@@ -67,6 +71,7 @@
       "label": "Arquitectura de Datos",
       "icon": "Database",
       "type": "section",
+      "ns": false,
       "fields": [
         {
           "key": "parent_key",
@@ -79,8 +84,9 @@
         {
           "key": "visible_fields",
           "label": "Campos del Formulario (Restricción)",
-          "type": "string",
-          "description": "Field keys separados por coma que se renderizan en este formulario. Vacío = todos los campos del schema. DISTINTO de switches: esta prop actúa sobre el formulario, no sobre tablas. Ejemplo: nombre_proyecto, cliente_id, estado"
+          "type": "multi-select",
+          "options_source": "dna_fields",
+          "description": "Field keys que se renderizan en este formulario. Vacío = todos los campos del schema."
         }
       ]
     }

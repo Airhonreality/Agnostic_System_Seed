@@ -1,3 +1,76 @@
+PENDIETES URGENTES:
+1. INCORPORAR ICNO DE ENGRANAJE DE ADMIN PARA QUE CUNADO EL USUARIO ES ADMIN, SIMEPRE APARESCA EN TODAS LAS PAGINAS ASI PEUDE DESPLEGAR PANEL DE CONFIGURACION DE RUTA, Y EDITAR VISUALIZACION EN TIEMPO REAL Y VER OCMO LA PAGINA CAMBIA PARAMETRICAMENTE.
+
+2. IMPLEMENTAR UN SITEMA NATIVO DE ADMINSTRACION DE WHITELIST DE USAERS, UNA SECCION DONDE SE CREEN Y ADMINISTREN LSITAS DE USAURIOS FAICLMENTE, CREAR ELMIANR LSITA AÑADIR USAURIOS, ALADIR BLOUE DE USARIOS, OSEA MUY SIMPLE Y AGNOSTIO,CO, PEUNTUALENTE QUE SOLO VENGA DEFINIDA UNA WHITELIST DEFAULT INBORRABLE, LA WHITELIST DE ADMIN. QUE ES LA QUE SE CARGA AUTAOMTICMAENT CUNAOD EL UUASIRO INCIA SESION PRIMERA VEZ EN PORTAL... 
+
+3. inCORPORAR AL OBEJTO "RUTA" CÓMO UN ELEMENTO QUE S EPEUDA LSITAR DE UNA COLECCION, ASI PODRIA CREAR NAV BARS PERSONALIZADOS, LA COLECCION SERPIA UNA LISTA DE RUTAS, CÓMO NATURALIZAMOS USAR EL OBJEOT RUTA DE MAENRA AGNOSTICA EN EL COMPOCITOR DE INTERFACES? 
+
+
+
+
+
+
+
+Pendiente para el fin de semana (pasos manuales, sin código):
+  1. Crear repo agnostic-portal en GitHub y hacer push del directorio local   
+  2. Conectar a Vercel
+  3. Registrar GitHub OAuth App (callback URL real)
+  4. Crear Upstash Redis KV y copiar credenciales
+  5. Setear las 6 env vars en Vercel
+
+----
+REOSLVER ESTO:
+lsito, y unas preguntas finales, de proceso.. si queiro seguir creanod      
+  webs usando el protocolo mcp, pero desde aqui, cual sería la forma 
+  correcta? hay un end point donde me pueda conectar desde esta terminal o    
+  cualquier terminal? y que ademas oajala en este mismo entorno al ir
+   local y subir a git hub? osea hablo de un proceso hibrido, seguir            mejorando el generador parametrico de interfaces con codigo ts directo en     el seed, pero al mismo timepo probarlo consutriyendo UIs con el mcp, osea     la UI ya viviria en la nibe git hub y se conectaria la end point pero los     parches del seed os haria directametn en local y pushearia... me hago         entender?                                                                   
+  
+● Sí, te entiendes perfectamente. Es el proceso ideal — dogfooding del propio
+  sistema.
+
+  Lo que ya existe para hacer eso:
+
+  El MCP bridge ya está en el repo:
+  scripts/mcp-bridge.ts  →  npm run mcp:bridge
+
+  Eso levanta un servidor MCP stdio que expone las 21 herramientas semánticas 
+  (create_schema, write_script, create_record, etc.). Cualquier cliente MCP — 
+  esta terminal, Cursor, Claude Desktop — puede conectarse ahí.
+
+  El flujo híbrido que describes:
+
+  Storage repo (GitHub)          Kernel local (tu máquina)
+  ─────────────────────          ──────────────────────────
+  db/schema_definitions.json     src/ — parches TypeScript
+  db/page_routes.json        ←→  npm run dev  (Next.js)
+  db/mis_datos.json              npm run mcp:bridge  (MCP server)
+           ↑                              ↑
+      MCP tools escriben aquí      tú parcheas el engine aquí
+      desde cualquier cliente      y pusheas a Agnostic_System_Seed
+
+  La pregunta clave antes del fin de semana:
+
+  ¿El npm run mcp:bridge está configurado para apuntar al storage repo de     
+  GitHub (GitHubStrategy) o todavía apunta a storage/ local? Eso determina si 
+  ya funciona en la nube o necesita un ajuste de configuración.
+
+  db/mis_datos.json              npm run mcp:bridge  (MCP server)
+           ↑                              ↑
+      MCP tools escriben aquí      tú parcheas el engine aquí
+      desde cualquier cliente      y pusheas a Agnostic_System_Seed
+
+  La pregunta clave antes del fin de semana:
+
+  ¿El npm run mcp:bridge está configurado para apuntar al storage repo de     
+  GitHub (GitHubStrategy) o todavía apunta a storage/ local? Eso determina si 
+  ya funciona en la nube o necesita un ajuste de configuración.
+
+  ¿Quieres que lo revise ahora?
+  ----
+  LUEGO PLAN REAL:
+
+
 # ROADMAP B — Modo Seguro de Pruebas (Staging Branch)
 
 **Prioridad:** 2 (requiere ROADMAP_LAUNCH Phase 1 completado)

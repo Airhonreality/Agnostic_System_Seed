@@ -32,12 +32,7 @@ import { useDNAStore, useMateriaStore, useActiveRecord } from '@/lib/agnostic/st
 import { useAppDispatch } from '@/context/AppContext';
 import { useParams } from 'next/navigation';
 
-function paddingToCss(p?: number[]): string {
-  if (!p || p.length < 4) return '';
-  return `${p[0]}rem ${p[1]}rem ${p[2]}rem ${p[3]}rem`;
-}
-
-export function AgnosticRenderer({ 
+export function AgnosticRenderer({
   block, 
   parentId: propParentId, 
   parentKey: propParentKey,
@@ -100,47 +95,22 @@ export function AgnosticRenderer({
     return null;
   }
 
-  // ─── COMPOSITE FRAME: tiene sub-bloques, solo posiciona si no es un componente registrado en la UI ───────────────────────
-  if (!BlockComponent && Array.isArray(block.blocks) && block.blocks.length > 0) {
-    return (
-      <div
-        className={cn(
-          'flex',
-          block.direction === 'horizontal' ? 'flex-row' : 'flex-col',
-          block.sizing === 'hug' ? 'w-auto' : 'w-full'
-        )}
-        style={{
-          gap: `${block.gap ?? 0}rem`,
-          padding: paddingToCss(block.padding),
-        }}
-      >
-        {block.blocks.map((sub: any, i: number) => (
-          <AgnosticRenderer
-            key={sub.id || i}
-            block={sub}
-            context={propContext}
-            intent={propIntent}
-            record={propRecord}
-            onSuccess={onSuccess}
-          />
-        ))}
-      </div>
-    );
-  }
-
   // ─── LEAF BLOCK: proyecta contenido ───────────────────────────────────────────
   try {
-    // 🏛️ AXIOMATIC RESOLUTION: Flatten namespaces from the Designer's ConfigProjector
+    // Merge order: old namespaces (backward compat) → block.config (canonical, wins)
     const effectiveConfig = {
-      ...(block.behavior || {}),         // intent, isCollapsible, defaultExpanded, sticky
-      ...(block.visual || {}),           // switches, blackout, variant, theme, width
-      ...(block.data_architecture || {}), // parent_key, segmentation_key, segmentation_strategy
-      ...(block.logic || {}),            // zap
-      ...config,                         // direct overrides
+      ...(block.behavior || {}),
+      ...(block.visual || {}),
+      ...(block.data_architecture || {}),
+      ...(block.logic || {}),
+      ...config,
+      ...(block.config || {}),
     };
 
+    const sizing = effectiveConfig.sizing || block.sizing;
+
     return (
-      <div className={block.sizing === 'hug' ? 'w-auto' : 'w-full'}>
+      <div className={sizing === 'hug' ? 'w-auto' : 'w-full'}>
         <BlockComponent
           {...block}
           {...(block.data || {})}
@@ -151,8 +121,8 @@ export function AgnosticRenderer({
           activeRecord={activeRecord}
           records={records}
           intent={intent}
-          parentId={propParentId || config.parent_id || activeRecord?.id}
-          parentKey={propParentKey || config.parent_key || effectiveConfig.parent_key}
+          parentId={propParentId || effectiveConfig.parent_id || config.parent_id || activeRecord?.id}
+          parentKey={propParentKey || effectiveConfig.parent_key || config.parent_key}
           onSuccess={onSuccess}
           api={agnosticApi}
         />

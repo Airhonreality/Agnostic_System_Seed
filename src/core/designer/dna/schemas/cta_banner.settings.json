@@ -7,6 +7,7 @@
       "label": "Call to Action",
       "icon": "Palette",
       "type": "section",
+      "ns": false,
       "fields": [
         { "key": "headline",  "label": "Título del Banner",  "type": "string" },
         { "key": "sub",       "label": "Subtítulo",          "type": "string" },

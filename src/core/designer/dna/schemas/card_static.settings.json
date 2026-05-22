@@ -7,6 +7,7 @@
       "label": "Contenido de la Tarjeta",
       "icon": "Palette",
       "type": "section",
+      "ns": false,
       "fields": [
         { "key": "icon",    "label": "Icono (Lucide)", "type": "string",
           "description": "Nombre del icono. Ejemplo: Package, Star, Shield." },

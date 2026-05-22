@@ -1,4 +1,12 @@
-import 'server-only';
+if (typeof window !== 'undefined') {
+  throw new Error('activeProject can only be used on the server.');
+}
+
+if (process.env.NEXT_RUNTIME) {
+  // Enforce server-only semantics in Next runtimes without breaking CLI usage.
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  require('server-only');
+}
 import fs from 'fs';
 import path from 'path';
 import type { SystemPassport } from '@agnostic/core';

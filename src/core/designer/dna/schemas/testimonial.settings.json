@@ -7,6 +7,7 @@
       "label": "Testimonio",
       "icon": "Palette",
       "type": "section",
+      "ns": false,
       "fields": [
         { "key": "quote",  "label": "Cita",             "type": "string" },
         { "key": "author", "label": "Autor",             "type": "string" },

@@ -8,6 +8,7 @@
       "label": "Comportamiento",
       "icon": "Activity",
       "type": "section",
+      "ns": false,
       "fields": [
         {
           "key": "intent",
@@ -32,6 +33,7 @@
       "label": "Estética y Proyección",
       "icon": "Palette",
       "type": "section",
+      "ns": false,
       "fields": [
         {
           "key": "view",
@@ -61,14 +63,16 @@
         {
           "key": "switches",
           "label": "Campos Visibles (Whitelist de Columnas)",
-          "type": "string",
-          "description": "Columnas a proyectar en tabla/cards separadas por coma. Vacío = todas. Controla AgnosticTable y AgnosticGroupedCard."
+          "type": "multi-select",
+          "options_source": "dna_fields",
+          "description": "Columnas a proyectar en tabla/cards. Vacío = todas."
         },
         {
           "key": "blackout",
           "label": "Campos Ocultos (Blacklist de Columnas)",
-          "type": "string",
-          "description": "Columnas a ocultar en la proyección separadas por coma."
+          "type": "multi-select",
+          "options_source": "dna_fields",
+          "description": "Columnas a ocultar de la proyección."
         }
       ]
     },
@@ -77,6 +81,7 @@
       "label": "Arquitectura de Datos",
       "icon": "Database",
       "type": "section",
+      "ns": false,
       "fields": [
         {
           "key": "parent_key",
