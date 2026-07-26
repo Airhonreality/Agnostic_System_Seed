@@ -7,6 +7,7 @@ Agents should keep this file short. Link only active or still-useful documents.
 ## Active Context
 
 - [current_state.md](current_state.md): current state of the fork.
+- [EXTENSION_POINTS_Y_ENFORCEMENT_2026-07-26.md](EXTENSION_POINTS_Y_ENFORCEMENT_2026-07-26.md): contrato de puntos de extensión para forks (identidad/SEO, theming, marketing, rutas, adapters) + enforcement de frontera (merge=ours, guardián pre-commit, pre-flight) + receta de sync con cero conflictos.
 
 ## Generated Snapshots
 
