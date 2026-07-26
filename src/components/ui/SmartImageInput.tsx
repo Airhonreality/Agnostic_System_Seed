@@ -13,6 +13,8 @@ type SingleProps = {
   accept?: string;
   className?: string;
   placeholder?: string;
+  /** Rehostea las URLs pegadas a la bóveda vía /api/upload. Default: true. */
+  rehostUrls?: boolean;
 };
 
 type MultipleProps = {
@@ -22,6 +24,8 @@ type MultipleProps = {
   accept?: string;
   className?: string;
   placeholder?: string;
+  /** Rehostea las URLs pegadas a la bóveda vía /api/upload. Default: true. */
+  rehostUrls?: boolean;
 };
 
 export type SmartImageInputProps = SingleProps | MultipleProps;
@@ -37,6 +41,7 @@ function matchesAccept(file: File, accept: string): boolean {
 
 export function SmartImageInput(props: SmartImageInputProps) {
   const { multiple, accept = IMAGE_ACCEPT, className, placeholder } = props;
+  const rehostUrls = props.rehostUrls ?? true;
   const [uploading, setUploading]   = useState(false);
   const [error, setError]           = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
@@ -111,13 +116,46 @@ export function SmartImageInput(props: SmartImageInputProps) {
     e.target.value = '';
   };
 
-  const handleUrlCommit = (e: React.KeyboardEvent<HTMLInputElement>) => {
+  const uploadFromUrl = useCallback(async (url: string): Promise<string> => {
+    const res = await fetch('/api/upload', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source_url: url }),
+    });
+    const json = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(json.error || 'No se pudo rehostear la URL');
+    return String(json.url || '');
+  }, []);
+
+  const commitUrl = useCallback(async () => {
+    const raw = urlInput.trim();
+    if (!raw) return;
+    // Sin rehosteo: guarda la URL tal cual.
+    if (!rehostUrls) {
+      emit(multiple ? [...urls, raw] : [raw]);
+      setUrlInput('');
+      return;
+    }
+    setUploading(true);
+    setError(null);
+    try {
+      const hosted = await uploadFromUrl(raw);
+      emit(multiple ? [...urls, hosted || raw] : [hosted || raw]);
+      setUrlInput('');
+    } catch (e) {
+      // Fallback: no bloquear al usuario; guarda la URL original.
+      emit(multiple ? [...urls, raw] : [raw]);
+      setUrlInput('');
+      setError(e instanceof Error ? `${e.message} — se guardó la URL original` : 'Error al rehostear');
+    } finally {
+      setUploading(false);
+    }
+  }, [urlInput, rehostUrls, multiple, urls, emit, uploadFromUrl]);
+
+  const handleUrlKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key !== 'Enter') return;
-    const url = urlInput.trim();
-    if (!url) return;
     e.preventDefault();
-    emit(multiple ? [...urls, url] : [url]);
-    setUrlInput('');
+    void commitUrl();
   };
 
   const remove = (index: number) => emit(urls.filter((_, i) => i !== index));
@@ -198,15 +236,14 @@ export function SmartImageInput(props: SmartImageInputProps) {
         <div className="relative flex-1 min-w-0">
           <Link size={11} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
           <Input
-            value={multiple ? urlInput : (urls[0] ?? '')}
-            onChange={(e) =>
-              multiple ? setUrlInput(e.target.value) : emit([e.target.value])
-            }
-            onKeyDown={multiple ? handleUrlCommit : undefined}
+            value={urlInput}
+            onChange={(e) => setUrlInput(e.target.value)}
+            onKeyDown={handleUrlKeyDown}
+            onBlur={() => { void commitUrl(); }}
             placeholder={
-              placeholder ?? (multiple
-                ? 'Pega URL y pulsa Enter — o pega imagen con Ctrl+V'
-                : 'https://... o pega imagen con Ctrl+V')
+              placeholder ?? (rehostUrls
+                ? 'Pega una URL (se rehostea) y Enter — o pega/arrastra imagen'
+                : 'Pega una URL y pulsa Enter — o pega/arrastra imagen')
             }
             className="h-8 text-[11px] font-mono pl-7"
           />
